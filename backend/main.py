@@ -40,7 +40,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("sci-article-reader")
 
-# ---- OpenAI client & model ----
+# Code Health Test Mock OpenAI
+MOCK_OPENAI = os.getenv("MOCK_OPENAI", "0") == "1"
+
+# OpenAI client & model 
 OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-3.5-turbo")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -50,7 +53,7 @@ try:
 except Exception:
     tokenizer = tiktoken.get_encoding("cl100k_base")
 
-# ---- FastAPI app ----
+# FastAPI app 
 app = FastAPI()
 
 # Ensure storage directories exist
@@ -68,7 +71,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---- Models ----
+# Models 
 class ArticleInput(BaseModel):
     text: str
 
@@ -78,7 +81,7 @@ class AudioRequest(BaseModel):
     article_title: str
     gender: str = "Male"
 
-# ---- Line-flattening utility ----
+# Line-flattening utility 
 def flatten_text(raw: str) -> str:
     """
     Merge hard-wrapped lines into paragraphs while preserving blank-line paragraph breaks.
@@ -107,8 +110,10 @@ def flatten_text(raw: str) -> str:
 
     return "\n\n".join(paragraphs)
 
-# ---- OpenAI cleaning / title extraction ----
+# OpenAI cleaning / title extraction 
 def query_openai(text: str, extract_title: bool = False) -> str:
+    if MOCK_OPENAI:
+        return "Mock Title" if extract_title else text
     try:
         if extract_title:
             system_prompt = (

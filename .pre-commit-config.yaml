@@ -1,0 +1,62 @@
+repos:
+  # Basic hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+        types: [text]
+      - id: trailing-whitespace
+        types: [text]
+      - id: check-yaml
+      - id: detect-private-key
+
+  # Python: ruff = linter + import sort + some fixes
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.12
+    hooks:
+      - id: ruff
+        args: [--fix]
+        additional_dependencies: []
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  # Python typing
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1
+    hooks:
+      - id: mypy
+        files: ^backend/
+        additional_dependencies: [types-requests]
+
+  # Python security (Bandit)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.6
+    hooks:
+      - id: bandit
+        args: [-q, -r, backend]
+        files: ^backend/
+
+  # Node/Frontend via local hooks
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: frontendlint
+        language: system
+        entry: bash -lc "cd frontend && npm run lint"
+        files: ^frontend/
+      - id: frontend-typecheck
+        name: frontendtypecheck
+        language: system
+        entry: bash -lc "cd frontend && npm run typecheck"
+        files: ^frontend/
+
+
+  # Pre-push tests
+  - repo: local
+    hooks:
+      - id: backend-tests
+        name: pytest (fast)
+        language: system
+        entry: bash -lc "cd backend && pytest -q -m 'not slow'"
+        stages: [pre-push]   # <- not 'push'
