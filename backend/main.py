@@ -6,6 +6,7 @@ import fitz
 import tiktoken
 import time
 import uuid
+import logging
 from openai import OpenAI
 
 from fastapi import UploadFile, File, FastAPI, HTTPException
@@ -16,34 +17,58 @@ from pydantic import BaseModel
 from celery.result import AsyncResult
 from dotenv import load_dotenv
 
+# Keep your existing imports/structure
 from tasks import generate_audio_task
 from celery_config import celery_app
 
+# Settings import
+try:
+    from config import SETTINGS, ensure_dirs
+except ImportError:
+    from .config import SETTINGS, ensure_dirs
+
+# Allow running as "uvicorn main:app" from backend/
 sys.path.append(os.path.dirname(__file__))
 
 # Load environment variables
 load_dotenv()
+
+# ---- Logging (env-driven) ----
+logging.basicConfig(
+    level=getattr(logging, SETTINGS.LOG_LEVEL.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("sci-article-reader")
+
+# ---- OpenAI client & model ----
+OPENAI_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-3.5-turbo")
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Tokenizer (not currently used, but keeping for future limits)
+try:
+    tokenizer = tiktoken.encoding_for_model(OPENAI_CHAT_MODEL)
+except Exception:
+    tokenizer = tiktoken.get_encoding("cl100k_base")
+
+# ---- FastAPI app ----
 app = FastAPI()
 
-CLEANED_DIR = os.path.join(os.path.dirname(__file__), "cleaned")
-os.makedirs(CLEANED_DIR, exist_ok=True)
+# Ensure storage directories exist
+ensure_dirs()
 
-app.mount(
-    "/static",
-    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")),
-    name="static"
-)
+# Static mount (env-driven)
+app.mount("/static", StaticFiles(directory=SETTINGS.AUDIO_OUT_DIR), name="static")
 
+# CORS (env-driven)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=SETTINGS.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ---- Models ----
 class ArticleInput(BaseModel):
     text: str
 
@@ -53,11 +78,37 @@ class AudioRequest(BaseModel):
     article_title: str
     gender: str = "Male"
 
-tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
+# ---- Line-flattening utility ----
+def flatten_text(raw: str) -> str:
+    """
+    Merge hard-wrapped lines into paragraphs while preserving blank-line paragraph breaks.
+    - Collapses multiple spaces/tabs.
+    - Joins lines within a paragraph with a single space.
+    - Preserves hyphenated line-break joins like 'transfor-\n mation' -> 'transformation'.
+    """
+    lines = raw.splitlines()
+    paragraphs = []
+    buf = []
 
-# Final cleaning step
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if buf:
+                paragraphs.append(" ".join(buf))
+                buf = []
+        else:
+            if buf and buf[-1].endswith("-"):
+                # join hyphenated breaks without a space
+                buf[-1] = buf[-1][:-1] + stripped
+            else:
+                buf.append(re.sub(r"\s+", " ", stripped))
+    if buf:
+        paragraphs.append(" ".join(buf))
 
-def query_openai(text: str, extract_title=False):
+    return "\n\n".join(paragraphs)
+
+# ---- OpenAI cleaning / title extraction ----
+def query_openai(text: str, extract_title: bool = False) -> str:
     try:
         if extract_title:
             system_prompt = (
@@ -70,7 +121,7 @@ def query_openai(text: str, extract_title=False):
             system_prompt = (
                 "You are a document cleaner preparing text for high-quality paragraph-based audio narration.\n"
                 "Your task is to preserve the original text *exactly as written*, while reflowing broken lines and removing citation clutter.\n\n"
-                "🔒 RULES:\n"
+                "RULES:\n"
                 "- Do NOT summarize, rewrite, shorten, or reinterpret the meaning of the text in any way.\n"
                 "- All words, phrases, and sentence structures must remain literally intact.\n"
                 "- Only merge lines into full paragraphs where a break was likely visual (e.g., from a PDF).\n"
@@ -79,7 +130,7 @@ def query_openai(text: str, extract_title=False):
                 "- No bullets, no formatting — just clean, flowing, literal text.\n"
                 "- Remove author/year citations like (Nguyen, 2020) or (Taylor, 2015), but keep the sentence exactly as-is otherwise.\n"
                 "- Output must be readable aloud, paragraph by paragraph.\n\n"
-                "✅ GOOD EXAMPLES:\n"
+                "GOOD EXAMPLES:\n"
                 "1. Input:\n"
                 "Introduction\n"
                 "In this article, we will explore the topic of consent in modern play spaces.\n\n"
@@ -98,24 +149,25 @@ def query_openai(text: str, extract_title=False):
                 "As discussed in the literature on digital agency (Taylor, 2015), the sense of self within online platforms is always in flux.\n\n"
                 "Output:\n"
                 "As discussed in the literature on digital agency, the sense of self within online platforms is always in flux.\n\n"
-                "📢 Your output will be split into paragraphs and read aloud. Make sure each paragraph is natural, flowing, and exactly faithful to the original meaning and tone."
+                "Your output will be split into paragraphs and read aloud. Make sure each paragraph is natural, flowing, and exactly faithful to the original meaning and tone."
             )
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+
+        resp = client.chat.completions.create(
+            model=OPENAI_CHAT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": text}
+                {"role": "user", "content": text},
             ],
             temperature=0.2,
-            max_tokens=1500
+            max_tokens=1500,
         )
-        return response.choices[0].message.content.strip()
+        return resp.choices[0].message.content.strip()
 
     except Exception as e:
-        print("OpenAI error:", e)
+        log.exception("OpenAI error")
         return "Error cleaning text"
 
-# Upload and process the article
+# ---- Routes ----
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     if file.filename.endswith(".txt"):
@@ -127,13 +179,13 @@ async def upload_file(file: UploadFile = File(...)):
     else:
         raise HTTPException(status_code=400, detail="Only .txt and .pdf files are supported.")
 
-    print("[INFO] Flattening input text...")
+    log.info("Flattening input text…")
     flattened_text = flatten_text(raw_text)
 
-    print("[INFO] Running final cleaning...")
+    log.info("Running final cleaning…")
     cleaned_text = query_openai(flattened_text)
 
-    print("[INFO] Extracting title...")
+    log.info("Extracting title…")
     display_title = query_openai(raw_text[:2000], extract_title=True)
     if display_title.startswith("Error") or len(display_title) > 200:
         display_title = "Untitled Article"
@@ -144,22 +196,20 @@ async def upload_file(file: UploadFile = File(...)):
     final_payload = {
         "id": article_code,
         "title": display_title,
-        "paragraphs": []
+        "paragraphs": [],
     }
 
     for i, p in enumerate(paragraphs):
         filename = f"{article_code}_{i+1}.wav"
         task = generate_audio_task.apply_async(
             args=[p, filename, article_code, "Male"],
-            queue="audio"
+            queue="audio",
         )
-        final_payload["paragraphs"].append({
-            "text": p,
-            "audio": filename,
-            "task_id": task.id
-        })
+        final_payload["paragraphs"].append(
+            {"text": p, "audio": filename, "task_id": task.id}
+        )
 
-    with open(os.path.join(CLEANED_DIR, f"{article_code}.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(SETTINGS.CLEANED_DIR, f"{article_code}.json"), "w", encoding="utf-8") as f:
         json.dump(final_payload, f, ensure_ascii=False, indent=2)
 
     return final_payload
@@ -167,19 +217,21 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/api/articles")
 def list_articles():
     articles = []
-    for filename in os.listdir(CLEANED_DIR):
+    for filename in os.listdir(SETTINGS.CLEANED_DIR):
         if filename.endswith(".json"):
-            with open(os.path.join(CLEANED_DIR, filename), "r", encoding="utf-8") as f:
+            with open(os.path.join(SETTINGS.CLEANED_DIR, filename), "r", encoding="utf-8") as f:
                 content = json.load(f)
-                articles.append({
-                    "id": filename.replace(".json", ""),
-                    "title": content.get("title", "Untitled")
-                })
+                articles.append(
+                    {
+                        "id": filename.replace(".json", ""),
+                        "title": content.get("title", "Untitled"),
+                    }
+                )
     return articles
 
 @app.get("/api/article/{article_id}")
 def get_article(article_id: str):
-    path = os.path.join(CLEANED_DIR, f"{article_id}.json")
+    path = os.path.join(SETTINGS.CLEANED_DIR, f"{article_id}.json")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Article not found")
     with open(path, "r", encoding="utf-8") as f:
@@ -188,7 +240,7 @@ def get_article(article_id: str):
 
 @app.delete("/api/article/{article_id}")
 def delete_article(article_id: str):
-    path = os.path.join(CLEANED_DIR, f"{article_id}.json")
+    path = os.path.join(SETTINGS.CLEANED_DIR, f"{article_id}.json")
     if os.path.exists(path):
         os.remove(path)
         return {"status": "deleted"}
@@ -196,7 +248,9 @@ def delete_article(article_id: str):
 
 @app.post("/generate_audio/")
 def generate_audio(req: AudioRequest):
-    task = generate_audio_task.delay(req.text, req.audio_filename, req.article_title, req.gender)
+    task = generate_audio_task.delay(
+        req.text, req.audio_filename, req.article_title, req.gender
+    )
     return {"status": "queued", "task_id": task.id}
 
 @app.get("/task_status/{task_id}")
@@ -205,13 +259,23 @@ def get_task_status(task_id: str):
     return {
         "task_id": task_id,
         "status": result.status,
-        "result": result.result if result.ready() else None
+        "result": result.result if result.ready() else None,
     }
 
 @app.get("/ping_celery")
 def ping_test():
     task = generate_audio_task.apply_async(
         args=["hello world", "test.wav", "test_article", "Male"],
-        queue="audio"
+        queue="audio",
     )
     return {"status": "sent", "task_id": task.id}
+
+# Optional: quick health endpoint
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "env": os.getenv("ENV", "dev"),
+        "audio_out_dir": SETTINGS.AUDIO_OUT_DIR,
+        "cleaned_dir": SETTINGS.CLEANED_DIR,
+    }
