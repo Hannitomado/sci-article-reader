@@ -23,21 +23,21 @@ export default function ArticleListScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Available Articles</h2>
+      <h2 className="text-2xl font-bold mb-4 text-inkBlack">Available Articles</h2>
       {loading && <p>Loading...</p>}
       <ul>
         {articles.map(article => (
           <li key={article.id} className="mb-2">
             <a
               href={`/converted/${article.id}`}
-              className="text-teal-700 underline"
+              className="text-skyFade underline"
             >
               {article.title}
             </a>
           </li>
         ))}
       </ul>
-      <button onClick={onBack} className="mt-6 px-4 py-2 bg-teal-600 text-white rounded">Back</button>
+      <button onClick={onBack} className="mt-6 px-4 py-2 bg-coralGlow text-inkBlack rounded">Back</button>
     </div>
   );
 }

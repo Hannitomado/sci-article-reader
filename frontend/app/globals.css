@@ -1,21 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light mode defaults */
+  --background: #d0cde5; /* Lavender Haze */
+  --foreground: #0d0c0a; /* Ink Black */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* Ondu brand palette */
+  --color-inkBlack: #0d0c0a;      /* primary text and stroke */
+  --color-coralGlow: #e0a0a1;     /* main accent */
+  --color-skyFade: #b9c1de;       /* secondary accent */
+  --color-duskBlue: #a9b4cd;      /* secondary UI surfaces */
+  --color-slateViolet: #a698b1;   /* neutral/inactive, borders */
+  --color-lavenderHaze: #d0cde5;  /* light backgrounds */
+  --color-lilacMist: #d0b6cb;     /* soft complementary accent */
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0d0c0a; /* Ink Black */
+    --foreground: #d0cde5; /* Lavender Haze */
   }
 }
 

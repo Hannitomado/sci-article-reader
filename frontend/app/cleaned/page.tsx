@@ -36,11 +36,11 @@ export default function CleanedArticlePage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-8">
-      <h1 className="text-3xl font-bold text-gray-900">{article.title}</h1>
+      <h1 className="text-3xl font-bold text-inkBlack">{article.title}</h1>
 
       {article.paragraphs.map((para, index) => (
-        <div key={index} className="bg-white shadow p-4 rounded-lg space-y-2">
-          <p className="text-gray-800 whitespace-pre-line">{para.text}</p>
+        <div key={index} className="bg-lavenderHaze shadow p-4 rounded-lg space-y-2">
+          <p className="text-inkBlack whitespace-pre-line">{para.text}</p>
 
           <audio controls className="w-full mt-2">
             <source

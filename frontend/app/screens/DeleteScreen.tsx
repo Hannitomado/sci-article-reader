@@ -39,15 +39,15 @@ export default function DeleteScreen({ onBack }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-teal-700 text-center mb-4">Manage Your Files</h2>
+      <h2 className="text-3xl font-bold text-inkBlack text-center mb-4">Manage Your Files</h2>
 
       {articles.length > 0 ? (
-        <div className="bg-pink-50 p-4 rounded-xl shadow-md text-slate-800">
+        <div className="bg-lilacMist p-4 rounded-xl shadow-md text-inkBlack">
           <label className="block mb-2 font-medium">Select a file to delete:</label>
           <select
             onChange={(e) => setSelectedId(e.target.value)}
             value={selectedId || ''}
-            className="w-full p-2 mb-4 rounded-md border border-slate-300"
+            className="w-full p-2 mb-4 rounded-md border border-slateViolet"
           >
             <option value="" disabled>Select an article</option>
             {articles.map((article) => (
@@ -66,13 +66,13 @@ export default function DeleteScreen({ onBack }: Props) {
           </button>
         </div>
       ) : (
-        <p className="text-center text-slate-600">{message || 'No articles found.'}</p>
+        <p className="text-center text-slateViolet">{message || 'No articles found.'}</p>
       )}
 
       <div className="text-center">
         <button
           onClick={onBack}
-          className="mt-6 bg-slate-200 hover:bg-slate-300 text-slate-800 px-6 py-2 rounded-lg shadow-sm font-medium"
+          className="mt-6 bg-duskBlue hover:bg-skyFade text-inkBlack px-6 py-2 rounded-lg shadow-sm font-medium"
         >
           ⬅ Back
         </button>

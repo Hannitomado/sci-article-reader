@@ -52,11 +52,11 @@ export default function UploadScreen({ onBack }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-teal-700 mb-4 text-center">Upload Text</h2>
+      <h2 className="text-3xl font-bold text-inkBlack mb-4 text-center">Upload Text</h2>
 
       <textarea
         placeholder="Paste your raw text here..."
-        className="w-full h-40 p-4 rounded-xl border border-pink-200 bg-pink-50 text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-300"
+        className="w-full h-40 p-4 rounded-xl border border-coralGlow bg-lavenderHaze text-inkBlack focus:outline-none focus:ring-2 focus:ring-coralGlow"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
@@ -66,7 +66,7 @@ export default function UploadScreen({ onBack }: Props) {
           type="file"
           accept=".txt,.pdf"
           onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="block text-sm text-slate-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-100 file:text-teal-800 hover:file:bg-teal-200"
+          className="block text-sm text-slateViolet file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-skyFade file:text-inkBlack hover:file:bg-duskBlue"
         />
       </div>
 
@@ -74,12 +74,12 @@ export default function UploadScreen({ onBack }: Props) {
         <button
           onClick={handleUpload}
           disabled={isLoading}
-          className="flex items-center justify-center gap-2 bg-yellow-200 hover:bg-yellow-300 text-slate-900 font-semibold px-6 py-2 rounded-xl shadow-md transition-all duration-200"
+          className="flex items-center justify-center gap-2 bg-coralGlow hover:bg-skyFade text-inkBlack font-semibold px-6 py-2 rounded-xl shadow-md transition-all duration-200"
         >
           {isLoading ? (
             <>
               <svg
-                className="animate-spin h-5 w-5 text-slate-900"
+                className="animate-spin h-5 w-5 text-inkBlack"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -107,13 +107,13 @@ export default function UploadScreen({ onBack }: Props) {
 
         <button
           onClick={onBack}
-          className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-6 py-2 rounded-xl shadow-sm transition-all duration-200"
+          className="bg-duskBlue hover:bg-skyFade text-inkBlack font-semibold px-6 py-2 rounded-xl shadow-sm transition-all duration-200"
         >
           ⬅ Back
         </button>
       </div>
 
-      {message && <p className="text-center text-teal-900 mt-4">{message}</p>}
+      {message && <p className="text-center text-inkBlack mt-4">{message}</p>}
     </div>
   );
 }

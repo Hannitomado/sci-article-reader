@@ -46,23 +46,23 @@ export default function ReaderScreen({ onBack, articleId }: Props) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-teal-700 text-center mb-4">Reader View</h2>
+      <h2 className="text-3xl font-bold text-inkBlack text-center mb-4">Reader View</h2>
 
       {error && <p className="text-center text-red-500">{error}</p>}
-      {!data && !error && <p className="text-center text-slate-700">Loading...</p>}
+      {!data && !error && <p className="text-center text-slateViolet">Loading...</p>}
 
       {data?.paragraphs.map((para, i) => (
         <div
           key={i}
           className={`p-4 rounded-xl shadow-sm transition-all duration-200 ${
-            currentIndex === i ? 'bg-pink-100' : 'bg-yellow-50'
+            currentIndex === i ? 'bg-coralGlow' : 'bg-lilacMist'
           }`}
         >
-          <p className="text-slate-800 mb-2">{para.text}</p>
+          <p className="text-inkBlack mb-2">{para.text}</p>
           <div className="flex gap-4 items-center">
             <button
               onClick={() => handlePlay(i, para.audio)}
-              className="bg-teal-100 hover:bg-teal-200 text-teal-900 px-4 py-1 rounded-lg font-medium"
+              className="bg-skyFade hover:bg-duskBlue text-inkBlack px-4 py-1 rounded-lg font-medium"
             >
               Play
             </button>
@@ -71,7 +71,7 @@ export default function ReaderScreen({ onBack, articleId }: Props) {
               placeholder="Add a note..."
               value={notes[i] || ''}
               onChange={(e) => handleNoteChange(i, e.target.value)}
-              className="flex-1 border border-slate-300 rounded-md px-3 py-1 text-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-300"
+              className="flex-1 border border-slateViolet rounded-md px-3 py-1 text-inkBlack focus:outline-none focus:ring-2 focus:ring-coralGlow"
             />
           </div>
         </div>
@@ -80,7 +80,7 @@ export default function ReaderScreen({ onBack, articleId }: Props) {
       <div className="text-center mt-6">
         <button
           onClick={onBack}
-          className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-6 py-2 rounded-lg shadow-sm font-medium"
+          className="bg-duskBlue hover:bg-skyFade text-inkBlack px-6 py-2 rounded-lg shadow-sm font-medium"
         >
           ⬅ Back
         </button>
