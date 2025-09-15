@@ -37,7 +37,10 @@ from .tasks import generate_audio_task
 from .celery_config import celery_app
 from .config import SETTINGS, ensure_dirs
 
-app = FastAPI()
+app = FastAPI(
+    title="Ondu API",
+    description="Clean papers. Hear them clearly. Strict mode: no summaries, no rewrites.",
+)
 
 # Ensure required directories exist before mounting static
 ensure_dirs()

@@ -1,5 +1,6 @@
 {
-  "name": "frontend",
+  "name": "ondu",
+  "description": "Clean papers. Hear them clearly.",
   "version": "0.1.0",
   "private": true,
   "scripts": {
