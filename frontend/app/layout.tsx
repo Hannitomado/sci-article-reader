@@ -15,6 +15,25 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ondu",
   description: "Clean papers. Hear them clearly.",
+  openGraph: {
+    title: "Ondu",
+    description: "Clean papers. Hear them clearly.",
+    url: "/",
+    siteName: "Ondu",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Ondu",
+    description: "Clean papers. Hear them clearly.",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/ondu.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default function RootLayout({
