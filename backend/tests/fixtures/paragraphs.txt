@@ -1,0 +1,8 @@
+Introduction
+In this article we examine techniques for robust text processing.
+We present methods that preserve the original wording while improving readability.
+
+Methods
+Our approach focuses on deterministic rules that do not alter meaning.
+We avoid machine learning for the cleaning step in order to maintain fidelity.
+

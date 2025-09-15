@@ -1,0 +1,17 @@
+Project Overview
+
+- Introduce the system architecture
+- Define key constraints and goals
+- Outline the deployment plan
+
+Key Transformations
+
+This project demonstrates a transfor-
+mation of legacy code into a modern service.
+It includes step-by-step refactors.
+
+References
+
+- [1] Smith et al. (2020)
+- [2] Doe & Roe (2021)
+

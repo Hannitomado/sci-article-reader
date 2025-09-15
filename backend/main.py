@@ -15,10 +15,15 @@ import time
 import uuid
 from openai import OpenAI
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError(f"OPENAI_API_KEY is not set. Expected it in {ENV_PATH}")
-client = OpenAI(api_key=OPENAI_API_KEY)
+from .config import SETTINGS, ensure_dirs
+
+# Create OpenAI client only if we might use LLMs here (strict mode disables cleaning/title LLMs)
+client: OpenAI | None = None
+if (not SETTINGS.STRICT_MODE) or SETTINGS.USE_LLM_TITLE:
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    if not OPENAI_API_KEY:
+        raise RuntimeError(f"OPENAI_API_KEY is not set. Expected it in {ENV_PATH}")
+    client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 from fastapi import UploadFile, File, FastAPI, HTTPException
@@ -138,6 +143,127 @@ def query_openai(text: str, extract_title=False):
         print("OpenAI error:", e)
         return "Error cleaning text"
 
+# Strict cleaner functions (deterministic, no LLM)
+def normalize_whitespace(s: str) -> str:
+    # Normalize newline types and spaces
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    # Convert non-breaking space to normal space
+    s = s.replace("\u00A0", " ")
+    # Collapse multiple spaces within lines
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    return s
+
+def _is_bullet_line(line: str) -> bool:
+    stripped = line.lstrip()
+    if not stripped:
+        return False
+    if stripped.startswith(("- ", "* ", "• ")):
+        return True
+    # Numeric bullets like '1.' or '1)'
+    return bool(re.match(r"^\s*\d+[\.)]\s+", line))
+
+def flatten_lines_to_paragraphs(raw: str) -> list[str]:
+    lines = raw.split("\n")
+    paras: list[str] = []
+    current: list[str] = []
+
+    def flush():
+        if current:
+            paras.append(" ".join(current).strip())
+            current.clear()
+
+    for i, line in enumerate(lines):
+        if not line.strip():
+            # blank line → paragraph break
+            flush()
+            continue
+
+        if _is_bullet_line(line):
+            flush()
+            paras.append(line.strip())
+            continue
+
+        if current:
+            prev = current[-1]
+            # If previous ends with hyphenated word and this starts with a letter, glue without space
+            if re.search(r"[A-Za-z]-$", prev) and re.match(r"^[A-Za-z]", line):
+                current[-1] = prev[:-1] + line.strip()
+            else:
+                current.append(line.strip())
+        else:
+            current.append(line.strip())
+
+    flush()
+    return [p for p in paras if p]
+
+def split_into_sentences(p: str) -> list[str]:
+    # Protect common abbreviations to avoid splitting
+    protect = {
+        "e.g.": "__EG__",
+        "i.e.": "__IE__",
+        "etc.": "__ETC__",
+    }
+    temp = p
+    for k, v in protect.items():
+        temp = temp.replace(k, v)
+
+    # Split on punctuation followed by space and an uppercase letter/number/parenthesis
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z(0-9])", temp)
+    # Restore abbreviations
+    def restore(s: str) -> str:
+        for k, v in protect.items():
+            s = s.replace(v, k)
+        return s
+    return [restore(x).strip() for x in parts if x and x.strip()]
+
+def chunk_paragraphs(paragraphs: list[str], limit: int) -> list[str]:
+    chunks: list[str] = []
+    current = ""
+    for p in paragraphs:
+        sentences = split_into_sentences(p)
+        for s in sentences:
+            if not current:
+                # start new
+                if len(s) > limit:
+                    # allow oversize sentence as its own chunk
+                    chunks.append(s)
+                else:
+                    current = s
+            else:
+                candidate = current + " " + s
+                if len(candidate) <= limit:
+                    current = candidate
+                else:
+                    chunks.append(current)
+                    if len(s) > limit:
+                        chunks.append(s)
+                        current = ""
+                    else:
+                        current = s
+    if current:
+        chunks.append(current)
+    return chunks
+
+def heuristic_title(raw_text: str, filename: str) -> str:
+    # take first non-empty line before first blank line
+    lines = normalize_whitespace(raw_text).split("\n")
+    block: list[str] = []
+    for line in lines:
+        if not line.strip():
+            break
+        block.append(line.strip())
+    candidate = next((l for l in block if l.strip()), "").strip()
+    def _word_count(s: str) -> int:
+        return len([w for w in s.split() if w])
+    def _is_all_capsish(s: str) -> bool:
+        letters = [ch for ch in s if ch.isalpha()]
+        return bool(letters) and sum(ch.isupper() for ch in letters) / len(letters) > 0.9
+    if candidate and _word_count(candidate) <= 16 and not _is_all_capsish(candidate):
+        return candidate
+    # fallback to filename sans extension
+    base = os.path.basename(filename or "")
+    return os.path.splitext(base)[0] or "Untitled Article"
+
 # Upload and process the article
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -161,18 +287,27 @@ async def upload_file(file: UploadFile = File(...)):
     else:
         raise HTTPException(status_code=400, detail="Only .txt and .pdf files are supported.")
 
-    print("[INFO] Flattening input text...")
-    flattened_text = flatten_text(raw_text)
-
-    print("[INFO] Running final cleaning...")
-    cleaned_text = query_openai(flattened_text)
-
-    print("[INFO] Extracting title...")
-    display_title = query_openai(raw_text[:2000], extract_title=True)
-    if display_title.startswith("Error") or len(display_title) > 200:
-        display_title = "Untitled Article"
-
-    paragraphs = [p.strip() for p in cleaned_text.split("\n") if p.strip()]
+    if SETTINGS.STRICT_MODE:
+        print("[INFO] Strict mode: deterministic cleaning and chunking")
+        text_norm = normalize_whitespace(raw_text)
+        paragraphs_list = flatten_lines_to_paragraphs(text_norm)
+        chunks = chunk_paragraphs(paragraphs_list, SETTINGS.CHUNK_CHAR_LIMIT)
+        display_title = heuristic_title(raw_text, file.filename or "") if not SETTINGS.USE_LLM_TITLE else ""
+        if SETTINGS.USE_LLM_TITLE and client is not None:
+            print("[INFO] Extracting title via LLM (explicitly enabled)")
+            display_title = query_openai(raw_text[:2000], extract_title=True)
+        if not display_title:
+            display_title = heuristic_title(raw_text, file.filename or "")
+    else:
+        print("[INFO] Flattening input text...")
+        flattened_text = flatten_text(raw_text)
+        print("[INFO] Running final cleaning via LLM...")
+        cleaned_text = query_openai(flattened_text)
+        print("[INFO] Extracting title via LLM...")
+        display_title = query_openai(raw_text[:2000], extract_title=True)
+        if display_title.startswith("Error") or len(display_title) > 200:
+            display_title = heuristic_title(raw_text, file.filename or "")
+        chunks = [p.strip() for p in cleaned_text.split("\n") if p.strip()]
     article_code = f"article_{int(time.time())}_{uuid.uuid4().hex[:6]}"
 
     final_payload = {
@@ -181,7 +316,7 @@ async def upload_file(file: UploadFile = File(...)):
         "paragraphs": []
     }
 
-    for i, p in enumerate(paragraphs):
+    for i, p in enumerate(chunks):
         filename = f"{article_code}_{i+1}.wav"
         task = generate_audio_task.apply_async(
             args=[p, filename, article_code, "Male"],

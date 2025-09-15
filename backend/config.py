@@ -54,6 +54,12 @@ class _Settings:
     TTS_FORMAT: str
     TTS_SAMPLE_RATE: int
 
+    # Strict cleaning and chunking
+    STRICT_MODE: bool
+    USE_LLM_TITLE: bool
+    REMOVE_CITATIONS: bool
+    CHUNK_CHAR_LIMIT: int
+
 
 def _build_settings() -> _Settings:
     env = os.getenv("ENV", "dev")
@@ -74,6 +80,17 @@ def _build_settings() -> _Settings:
     tts_format = os.getenv("TTS_FORMAT", "wav")
     tts_sample_rate = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
 
+    def _get_bool(name: str, default: bool) -> bool:
+        val = os.getenv(name)
+        if val is None:
+            return default
+        return str(val).strip().lower() in {"1", "true", "yes", "on"}
+
+    strict_mode = _get_bool("STRICT_MODE", True)
+    use_llm_title = _get_bool("USE_LLM_TITLE", False)
+    remove_citations = _get_bool("REMOVE_CITATIONS", False)
+    chunk_char_limit = int(os.getenv("CHUNK_CHAR_LIMIT", "1400"))
+
     return _Settings(
         ENV=env,
         LOG_LEVEL=log_level,
@@ -87,6 +104,10 @@ def _build_settings() -> _Settings:
         TTS_VOICE=tts_voice,
         TTS_FORMAT=tts_format,
         TTS_SAMPLE_RATE=tts_sample_rate,
+        STRICT_MODE=strict_mode,
+        USE_LLM_TITLE=use_llm_title,
+        REMOVE_CITATIONS=remove_citations,
+        CHUNK_CHAR_LIMIT=chunk_char_limit,
     )
 
 
