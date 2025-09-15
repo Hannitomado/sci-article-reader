@@ -1,3 +1,10 @@
+from pathlib import Path
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent        # .../backend
+ENV_PATH = BASE_DIR / ".env"                      # .../backend/.env
+load_dotenv(ENV_PATH, override=False)
+
 import os
 import re
 import sys
@@ -8,37 +15,37 @@ import time
 import uuid
 from openai import OpenAI
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError(f"OPENAI_API_KEY is not set. Expected it in {ENV_PATH}")
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+
 from fastapi import UploadFile, File, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from celery.result import AsyncResult
-from dotenv import load_dotenv
 
-from tasks import generate_audio_task
-from celery_config import celery_app
-
-sys.path.append(os.path.dirname(__file__))
-
-# Load environment variables
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from .tasks import generate_audio_task
+from .celery_config import celery_app
+from .config import SETTINGS, ensure_dirs
 
 app = FastAPI()
 
-CLEANED_DIR = os.path.join(os.path.dirname(__file__), "cleaned")
-os.makedirs(CLEANED_DIR, exist_ok=True)
+# Ensure required directories exist before mounting static
+ensure_dirs()
 
 app.mount(
     "/static",
-    StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")),
+    StaticFiles(directory=SETTINGS.AUDIO_OUT_DIR),
     name="static"
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=SETTINGS.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -159,7 +166,7 @@ async def upload_file(file: UploadFile = File(...)):
             "task_id": task.id
         })
 
-    with open(os.path.join(CLEANED_DIR, f"{article_code}.json"), "w", encoding="utf-8") as f:
+    with open(os.path.join(SETTINGS.CLEANED_DIR, f"{article_code}.json"), "w", encoding="utf-8") as f:
         json.dump(final_payload, f, ensure_ascii=False, indent=2)
 
     return final_payload
@@ -167,9 +174,9 @@ async def upload_file(file: UploadFile = File(...)):
 @app.get("/api/articles")
 def list_articles():
     articles = []
-    for filename in os.listdir(CLEANED_DIR):
+    for filename in os.listdir(SETTINGS.CLEANED_DIR):
         if filename.endswith(".json"):
-            with open(os.path.join(CLEANED_DIR, filename), "r", encoding="utf-8") as f:
+            with open(os.path.join(SETTINGS.CLEANED_DIR, filename), "r", encoding="utf-8") as f:
                 content = json.load(f)
                 articles.append({
                     "id": filename.replace(".json", ""),
@@ -179,7 +186,7 @@ def list_articles():
 
 @app.get("/api/article/{article_id}")
 def get_article(article_id: str):
-    path = os.path.join(CLEANED_DIR, f"{article_id}.json")
+    path = os.path.join(SETTINGS.CLEANED_DIR, f"{article_id}.json")
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Article not found")
     with open(path, "r", encoding="utf-8") as f:
@@ -188,7 +195,7 @@ def get_article(article_id: str):
 
 @app.delete("/api/article/{article_id}")
 def delete_article(article_id: str):
-    path = os.path.join(CLEANED_DIR, f"{article_id}.json")
+    path = os.path.join(SETTINGS.CLEANED_DIR, f"{article_id}.json")
     if os.path.exists(path):
         os.remove(path)
         return {"status": "deleted"}

@@ -1,7 +1,10 @@
 import sys
 import os
 
-sys.path.append(os.path.dirname(__file__))
+# Ensure project root is on sys.path so we can import the package `backend`
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
-from celery_config import celery_app
-import tasks  # Required to register tasks
+from backend.celery_config import celery_app
+import backend.tasks  # Required to register tasks
