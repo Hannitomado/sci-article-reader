@@ -68,7 +68,8 @@ def _build_settings() -> _Settings:
     max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "20"))
 
     openai_chat_model = os.getenv("OPENAI_CHAT_MODEL", "gpt-3.5-turbo")
-    tts_model = os.getenv("TTS_MODEL", "tts-1")
+    # Prefer the newer unified TTS model by default
+    tts_model = os.getenv("TTS_MODEL", "gpt-4o-mini-tts")
     tts_voice = os.getenv("TTS_VOICE", "onyx")
     tts_format = os.getenv("TTS_FORMAT", "wav")
     tts_sample_rate = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
@@ -96,4 +97,3 @@ def ensure_dirs() -> None:
     """Create required directories if they don't exist."""
     for d in (SETTINGS.AUDIO_OUT_DIR, SETTINGS.CLEANED_DIR, SETTINGS.UPLOAD_TMP_DIR):
         os.makedirs(d, exist_ok=True)
-

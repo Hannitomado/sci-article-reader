@@ -37,6 +37,9 @@ app = FastAPI()
 # Ensure required directories exist before mounting static
 ensure_dirs()
 
+# Upload size limit in bytes (converted from MB)
+MAX_BYTES = SETTINGS.MAX_UPLOAD_MB * 1024 * 1024
+
 app.mount(
     "/static",
     StaticFiles(directory=SETTINGS.AUDIO_OUT_DIR),
@@ -63,6 +66,19 @@ class AudioRequest(BaseModel):
 tokenizer = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
 # Final cleaning step
+
+def flatten_text(raw: str) -> str:
+    # Normalize newlines
+    txt = raw.replace("\r\n", "\n").replace("\r", "\n")
+    # Remove hyphenation across line breaks: e.g., "exam-\nple" -> "example"
+    txt = re.sub(r"(\w)-\n(\w)", r"\1\2", txt)
+    # Merge single newlines into spaces (keep double-newline as paragraph break)
+    txt = re.sub(r"(?<!\n)\n(?!\n)", " ", txt)
+    # Collapse excessive blank lines
+    txt = re.sub(r"\n{3,}", "\n\n", txt)
+    # Collapse multiple spaces
+    txt = re.sub(r"[ \t]{2,}", " ", txt)
+    return txt.strip()
 
 def query_openai(text: str, extract_title=False):
     try:
@@ -125,12 +141,23 @@ def query_openai(text: str, extract_title=False):
 # Upload and process the article
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    if file.filename.endswith(".txt"):
-        contents = await file.read()
-        raw_text = contents.decode("utf-8")
-    elif file.filename.endswith(".pdf"):
-        doc = fitz.open(stream=await file.read(), filetype="pdf")
-        raw_text = "\n".join([page.get_text() for page in doc])
+    # Read once with a hard cap
+    blob = await file.read(MAX_BYTES + 1)
+    if len(blob) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"File too large. Max {SETTINGS.MAX_UPLOAD_MB} MB.")
+
+    name = file.filename or ""
+    lower_name = name.lower()
+
+    if lower_name.endswith(".txt"):
+        try:
+            raw_text = blob.decode("utf-8")
+        except UnicodeDecodeError:
+            raw_text = blob.decode("utf-8", errors="ignore")
+    elif lower_name.endswith(".pdf"):
+        raw_text = extract_text_from_pdf(blob)
+        if not raw_text or not raw_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
     else:
         raise HTTPException(status_code=400, detail="Only .txt and .pdf files are supported.")
 
@@ -222,3 +249,23 @@ def ping_test():
         queue="audio"
     )
     return {"status": "sent", "task_id": task.id}
+
+
+def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        texts: list[str] = []
+        for i in range(doc.page_count):
+            p = doc.load_page(i)
+            t = p.get_text() or ""
+            if not isinstance(t, str):
+                t = ""
+            if len(t.strip()) < 5:
+                t2 = p.get_text("text")
+                if isinstance(t2, str) and t2:
+                    t = t2
+            texts.append(t)
+        return "\n".join(texts)
+    except Exception as e:
+        print("[ERROR] PDF extraction failed:", e)
+        return ""
