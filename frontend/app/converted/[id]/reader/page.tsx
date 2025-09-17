@@ -12,6 +12,7 @@ export default function ReaderPage() {
   const params = useParams();
   const articleId = params?.id as string;
   const [article, setArticle] = useState<Article | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
 
   const {
@@ -25,11 +26,17 @@ export default function ReaderPage() {
   useEffect(() => {
     if (!articleId) return;
     (async () => {
-      const res = await fetch(`/api/article/${articleId}`);
-      if (!res.ok) throw new Error("Failed to load article");
-      const data = await res.json();
-      setArticle(data);
-      load(data.paragraphs, 0);
+      try {
+        const res = await fetch(`/api/article/${articleId}`);
+        if (!res.ok) throw new Error(`Failed to load article (${res.status})`);
+        const data = await res.json();
+        setArticle(data);
+        setError(null);
+        load(data.paragraphs, 0);
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message || "Failed to load article");
+      }
     })();
   }, [articleId, load]);
 
@@ -63,6 +70,7 @@ export default function ReaderPage() {
   }, [toggle, next, prev]);
 
   if (!articleId) return <div className="p-6 text-red-600">Invalid article id.</div>;
+  if (error) return <div className="p-6 text-red-600">{error}</div>;
   if (!article) return <div className="p-6">Loading…</div>;
 
   return (
