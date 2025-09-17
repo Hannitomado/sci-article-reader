@@ -19,3 +19,14 @@ backend/cleaned/*
 !backend/cleaned/.gitkeep
 backend/tmp/*
 !backend/tmp/.gitkeep
+# Temporary uploads
+backend/temp_uploads/*
+!backend/temp_uploads/.gitkeep
+
+# Accidentally committed Windows venv under backend/
+backend/Lib/
+backend/Scripts/
+
+# Data zips and large archives
+data/**/*.zip
+data/*.zip
