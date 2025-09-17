@@ -11,3 +11,11 @@ venv/
 # System
 .DS_Store
 *.log
+
+# Project outputs (do not commit)
+backend/static/*
+!backend/static/.gitkeep
+backend/cleaned/*
+!backend/cleaned/.gitkeep
+backend/tmp/*
+!backend/tmp/.gitkeep
