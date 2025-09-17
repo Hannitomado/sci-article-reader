@@ -17,7 +17,7 @@ blis==1.2.1
 bnnumerizer==0.0.2
 bnunicodenormalizer==0.1.7
 catalogue==2.0.10
-celery==5.5.3
+celery[redis]==5.5.3
 certifi==2025.6.15
 cffi==1.17.1
 cfgv==3.4.0
@@ -159,7 +159,7 @@ python-pptx==1.0.2
 pytz==2025.2
 pywin32==310
 PyYAML==6.0.2
-redis==6.2.0
+redis>=5,<6
 referencing==0.36.2
 regex==2024.11.6
 requests==2.32.4
