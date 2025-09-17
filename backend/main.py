@@ -325,10 +325,13 @@ async def upload_file(file: UploadFile = File(...)):
             args=[p, filename, article_code, "Male"],
             queue="audio"
         )
+        # Store API-friendly fields; keep task_id for internal use if needed
         final_payload["paragraphs"].append({
+            "id": f"p{i+1}",
             "text": p,
+            "audio_url": f"/static/{filename}",
+            "task_id": task.id,
             "audio": filename,
-            "task_id": task.id
         })
 
     with open(os.path.join(SETTINGS.CLEANED_DIR, f"{article_code}.json"), "w", encoding="utf-8") as f:
@@ -356,6 +359,21 @@ def get_article(article_id: str):
         raise HTTPException(status_code=404, detail="Article not found")
     with open(path, "r", encoding="utf-8") as f:
         content = json.load(f)
+    # Backward compatibility: ensure each paragraph has id and audio_url
+    paragraphs = content.get("paragraphs", [])
+    fixed: list[dict] = []
+    for idx, p in enumerate(paragraphs):
+        q = dict(p)
+        if "id" not in q:
+            q["id"] = f"p{idx+1}"
+        if "audio_url" not in q:
+            filename = q.get("audio") or f"{article_id}_{idx+1}.wav"
+            q["audio_url"] = f"/static/{filename}"
+        # Ensure text is present and unmodified from stored value
+        if "text" not in q:
+            q["text"] = p.get("text", "")
+        fixed.append(q)
+    content["paragraphs"] = fixed
     return JSONResponse(content=content)
 
 @app.delete("/api/article/{article_id}")
