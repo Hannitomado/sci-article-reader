@@ -3,13 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAudioPlaylist } from "@/app/hooks/useAudioPlaylist";
 import WordHighlighter from "@/app/components/WordHighlighter";
 import { tokenizeParagraph, mergeTimings, findActiveWordIndex } from "@/app/lib/textTiming";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 type Paragraph = { id: string; text: string; audio_url: string };
 type Article = { id: string; title: string; paragraphs: Paragraph[] };
 
 export default function ReaderPage() {
   const params = useParams();
+  const router = useRouter();
   const articleId = params?.id as string;
   const [article, setArticle] = useState<Article | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,8 +110,15 @@ export default function ReaderPage() {
     >
       <h1 className="text-2xl font-semibold">{article.title}</h1>
 
-      <div className="rounded-2xl p-4 border shadow bg-white/5 flex items-center gap-3 sticky top-2 backdrop-blur">
+      <div className="rounded-2xl p-4 border shadow bg-white/5 flex flex-wrap items-center gap-3 sticky top-2 backdrop-blur">
         <audio ref={audioRef} preload="metadata" />
+        <button
+          onClick={() => router.back()}
+          className="px-3 py-1 rounded-2xl border shadow hover:shadow-lg"
+          aria-label="Back"
+        >
+          Back
+        </button>
         <button
           onClick={toggle}
           className="px-3 py-1 rounded-2xl shadow border hover:shadow-lg"
@@ -121,6 +129,8 @@ export default function ReaderPage() {
         {!hasEverPlayed && (
           <span className="text-xs opacity-70">Click Play to start audio</span>
         )}
+        <button onClick={prev} className="px-2 py-1 border rounded" aria-label="Previous paragraph">⟨ Prev</button>
+        <button onClick={next} className="px-2 py-1 border rounded" aria-label="Next paragraph">Next ⟩</button>
         <input
           type="range"
           min={0}
@@ -140,22 +150,20 @@ export default function ReaderPage() {
               setActiveWordIndex(idx);
             }
           }}
-          className="w-full"
+          className="w-64 md:w-96"
           aria-label="Progress"
           aria-valuemin={0}
           aria-valuemax={1}
           aria-valuenow={progress}
           disabled={!hasMetadata}
         />
-        <span className="w-32 text-right tabular-nums">
+        <span className="w-32 text-right tabular-nums ml-auto">
           {hasMetadata ? (
             `${formatTime(currentTime)} / ${formatTime(duration)}`
           ) : (
             "Loading audio…"
           )}
         </span>
-        <button onClick={prev} className="px-2 py-1 border rounded" aria-label="Previous paragraph">⟨ Prev</button>
-        <button onClick={next} className="px-2 py-1 border rounded" aria-label="Next paragraph">Next ⟩</button>
         <span className="sr-only" aria-live="polite">{nowPlaying}</span>
         {notice && (
           <span className="text-xs text-amber-700">{notice}</span>
@@ -178,6 +186,16 @@ export default function ReaderPage() {
           </div>
         ))}
       </div>
+
+      <div className="flex justify-center py-6">
+        <button
+          onClick={() => router.back()}
+          className="px-4 py-2 rounded-2xl border shadow hover:shadow-lg"
+          aria-label="Back to previous"
+        >
+          Back
+        </button>
+      </div>
     </div>
   );
 }
@@ -188,4 +206,3 @@ function formatTime(s: number) {
   const sec = Math.floor(s % 60).toString().padStart(2, "0");
   return `${m}:${sec}`;
 }
-

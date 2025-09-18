@@ -17,7 +17,7 @@ export default function WordHighlighter({
       {tokens.map((t, i) => (
         <span
           key={`${i}-${t.startChar}`}
-          className={activeWordIndex === i ? "font-bold underline" : ""}
+          className={activeWordIndex === i ? "font-bold" : ""}
         >
           {t.word}{" "}
         </span>
@@ -25,4 +25,3 @@ export default function WordHighlighter({
     </p>
   );
 }
-
