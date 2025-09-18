@@ -4,11 +4,30 @@
   /* Light mode defaults */
   --background: #d0cde5; /* Lavender Haze */
   --foreground: #0d0c0a; /* Ink Black */
+
+  /* Semantic tokens (light) */
+  --bg: #d0cde5;
+  --surface: #a9b4cd; /* duskBlue */
+  --surface-muted: #a698b1; /* slateViolet */
+  --text-primary: #0d0c0a; /* inkBlack */
+  --text-secondary: #4a4742;
+  --accent: #e0a0a1; /* coralGlow */
+  --accent-contrast: #0d0c0a;
+  --border: #a698b1; /* slateViolet */
+  --ring: rgba(13, 12, 10, 0.3);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-accent: var(--accent);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
 
   /* Ondu brand palette */
   --color-inkBlack: #0d0c0a;      /* primary text and stroke */
@@ -27,11 +46,22 @@
   :root {
     --background: #0d0c0a; /* Ink Black */
     --foreground: #d0cde5; /* Lavender Haze */
+
+    /* Semantic tokens (dark) */
+    --bg: #0d0c0a;
+    --surface: #6d6680; /* readable variant */
+    --surface-muted: #5a5870;
+    --text-primary: #d0cde5;
+    --text-secondary: #b9b6c9;
+    --accent: #e0a0a1;
+    --accent-contrast: #0d0c0a;
+    --border: #5a5870;
+    --ring: rgba(255, 255, 255, 0.3);
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text-primary);
   font-family: Arial, Helvetica, sans-serif;
 }

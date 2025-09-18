@@ -110,7 +110,7 @@ export default function ReaderPage() {
     >
       <h1 className="text-2xl font-semibold">{article.title}</h1>
 
-      <div className="rounded-2xl p-4 border shadow bg-white/5 flex flex-wrap items-center gap-3 sticky top-2 backdrop-blur">
+      <div className="rounded-2xl p-4 border border-slateViolet/50 shadow bg-[#f7f8fc] text-inkBlack flex flex-wrap items-center gap-3 sticky top-2">
         <audio ref={audioRef} preload="metadata" />
         <button
           onClick={() => router.back()}
@@ -175,7 +175,7 @@ export default function ReaderPage() {
           <div
             id={`para-${p.id}`}
             key={p.id}
-            className={`rounded-2xl p-4 ${i === activeIndex ? "ring-2 ring-blue-400" : "border"}`}
+            className={`rounded-2xl p-4 bg-[#f7f8fc] text-inkBlack shadow-sm ${i === activeIndex ? "ring-2 ring-blue-400" : "border border-slateViolet/50"}`}
             onClick={() => setIndex(i)}
           >
             <div className="text-sm opacity-60 mb-2">Paragraph {i + 1}</div>

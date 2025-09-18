@@ -56,7 +56,7 @@ export default function UploadScreen({ onBack }: Props) {
 
       <textarea
         placeholder="Paste your raw text here..."
-        className="w-full h-40 p-4 rounded-xl border border-coralGlow bg-lavenderHaze text-inkBlack focus:outline-none focus:ring-2 focus:ring-coralGlow"
+        className="w-full h-40 p-4 rounded-xl border border-coralGlow bg-white text-inkBlack focus:outline-none focus:ring-2 focus:ring-coralGlow"
         value={text}
         onChange={(e) => setText(e.target.value)}
       />

@@ -10,26 +10,16 @@ export default function ConvertedListPage() {
       if (typeof window !== 'undefined' && window.history.length > 1) {
         router.back();
       } else {
-        router.push('/');
+        router.push('/?screen=main');
       }
     } catch {
-      router.push('/');
+      router.push('/?screen=main');
     }
   };
 
   return (
     <>
       <ArticleListScreen onBack={handleBack} />
-      <div className="text-center mt-6">
-        <button
-          onClick={handleBack}
-          className="px-6 py-2 rounded-lg border text-inkBlack dark:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inkBlack/30 dark:focus-visible:ring-foreground/30 min-h-[44px] min-w-[44px]"
-          aria-label="Back"
-        >
-          Back
-        </button>
-      </div>
     </>
   );
 }
-
