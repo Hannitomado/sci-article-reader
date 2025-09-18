@@ -19,6 +19,9 @@ backend/cleaned/*
 !backend/cleaned/.gitkeep
 backend/tmp/*
 !backend/tmp/.gitkeep
+# Ignore nested duplicate frontend project and temp files
+frontend/frontend/
+TMP_*
 # Temporary uploads
 backend/temp_uploads/*
 !backend/temp_uploads/.gitkeep

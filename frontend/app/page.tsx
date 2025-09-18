@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import WelcomeScreen from './screens/WelcomeScreen';
 import MainMenu from './screens/MainMenu';
 import UploadScreen from './screens/UploadScreen';
-import ReaderScreen from './screens/ReaderScreen';
 import DeleteScreen from './screens/DeleteScreen';
 import ArticleListScreen from './screens/ArticleListScreen';
 
@@ -22,8 +21,6 @@ export default function Home() {
         return <MainMenu onNavigate={setScreen} />;
       case 'upload':
         return <UploadScreen onBack={() => setScreen('main')} />;
-      case 'reader':
-        return <ReaderScreen onBack={() => setScreen('main')} />;
       case 'delete':
         return <DeleteScreen onBack={() => setScreen('main')} />;
       case 'list':
