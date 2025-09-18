@@ -11,6 +11,11 @@ export function useAudioPlaylist() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [hasMetadata, setHasMetadata] = useState(false);
+  const [hasEverPlayed, setHasEverPlayed] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const prefetchRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchedIdRef = useRef<string | null>(null);
 
   const progress = useMemo(
     () => (duration > 0 ? currentTime / duration : 0),
@@ -18,8 +23,9 @@ export function useAudioPlaylist() {
   );
 
   const load = useCallback((tracks: Track[], startIndex = 0) => {
-    setList(tracks);
-    setActiveIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
+    const filtered = tracks.filter(t => (t.text ?? "").trim().length > 0);
+    setList(filtered);
+    setActiveIndex(Math.max(0, Math.min(startIndex, filtered.length - 1)));
   }, []);
 
   const setIndex = useCallback((i: number) => {
@@ -37,6 +43,7 @@ export function useAudioPlaylist() {
     try {
       await a.play();
       setIsPlaying(true);
+      // will set hasEverPlayed on 'play' event
     } catch (e) {
       console.warn("Play blocked:", e);
     }
@@ -75,13 +82,17 @@ export function useAudioPlaylist() {
   useEffect(() => {
     const a = audioRef.current;
     if (!a || list.length === 0) return;
-    a.src = list[activeIndex].audio_url;
+    const track = list[activeIndex];
+    a.src = track.audio_url;
     a.load();
+    setHasMetadata(false);
+    setDuration(0);
+    setCurrentTime(0);
+    // reset prefetch tracking for new active
+    prefetchedIdRef.current = null;
     if (isPlaying) {
       a.play().catch(() => {});
     }
-    const el = document.getElementById(`para-${activeIndex}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeIndex, list, isPlaying]);
 
   // Wire time events and prefetch next
@@ -92,21 +103,33 @@ export function useAudioPlaylist() {
     const onTime = () => {
       setCurrentTime(a.currentTime || 0);
       setDuration(a.duration || 0);
-      if (a.duration && a.currentTime / a.duration > 0.8) {
+      // Lightweight single prefetch ~85%
+      if (a.duration && a.currentTime / a.duration > 0.85) {
         const nextTrack = list[activeIndex + 1];
-        if (nextTrack) {
-          const pre = new Audio();
+        if (nextTrack && prefetchedIdRef.current !== nextTrack.id) {
+          if (!prefetchRef.current) prefetchRef.current = new Audio();
+          const pre = prefetchRef.current;
           pre.preload = "auto";
           pre.src = nextTrack.audio_url;
+          prefetchedIdRef.current = nextTrack.id;
         }
       }
     };
     const onEnd = () => next();
-    const onPlay = () => setIsPlaying(true);
+    const onPlay = () => {
+      setIsPlaying(true);
+      if (!hasEverPlayed) setHasEverPlayed(true);
+    };
     const onPause = () => setIsPlaying(false);
     const onError = () => {
-      console.warn("Audio error, skipping forward");
+      const track = list[activeIndex];
+      console.warn("Audio error, skipping", track?.id, track?.audio_url);
+      setNotice(`Audio failed for ${track?.id ?? "unknown"}, skipping…`);
       next();
+    };
+    const onLoadedMetadata = () => {
+      setHasMetadata(isFinite(a.duration) && a.duration > 0);
+      setDuration(a.duration || 0);
     };
 
     a.addEventListener("timeupdate", onTime);
@@ -114,14 +137,16 @@ export function useAudioPlaylist() {
     a.addEventListener("play", onPlay);
     a.addEventListener("pause", onPause);
     a.addEventListener("error", onError);
+    a.addEventListener("loadedmetadata", onLoadedMetadata);
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnd);
       a.removeEventListener("play", onPlay);
       a.removeEventListener("pause", onPause);
       a.removeEventListener("error", onError);
+      a.removeEventListener("loadedmetadata", onLoadedMetadata);
     };
-  }, [activeIndex, list, next]);
+  }, [activeIndex, list, next, hasEverPlayed]);
 
   return {
     audioRef,
@@ -129,7 +154,8 @@ export function useAudioPlaylist() {
     activeIndex, setIndex,
     isPlaying, play, pause, toggle,
     currentTime, duration, progress,
+    hasMetadata, hasEverPlayed,
+    notice, setNotice,
     next, prev, seek,
   };
 }
-
