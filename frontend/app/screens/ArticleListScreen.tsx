@@ -24,14 +24,14 @@ export default function ArticleListScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4 text-foreground">Available Articles</h2>
-      {loading && <p className="text-foreground/80">Loading…</p>}
+      <h2 className="text-2xl font-bold mb-4 text-inkBlack dark:text-foreground">Available Articles</h2>
+      {loading && <p className="text-inkBlack/80 dark:text-foreground/80">Loading…</p>}
       <ul className="space-y-2">
         {articles.map(article => (
           <li key={article.id} className="leading-relaxed">
             <a
               href={`/converted/${article.id}`}
-              className="block px-3 py-2 rounded-md text-foreground hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 transition"
+              className="block px-3 py-2 rounded-md text-inkBlack dark:text-foreground hover:underline focus-visible:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inkBlack/30 dark:focus-visible:ring-foreground/30 transition"
             >
               {article.title}
             </a>
@@ -40,7 +40,7 @@ export default function ArticleListScreen({ onBack }: { onBack: () => void }) {
       </ul>
       <button
         onClick={onBack}
-        className="mt-6 px-4 py-2 rounded-md border text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 min-h-[44px] min-w-[44px]"
+        className="mt-6 px-4 py-2 rounded-md border text-inkBlack dark:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inkBlack/30 dark:focus-visible:ring-foreground/30 min-h-[44px] min-w-[44px]"
         aria-label="Back"
       >
         Back
