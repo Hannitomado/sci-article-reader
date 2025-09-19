@@ -22,6 +22,7 @@ backend/tmp/*
 # Ignore nested duplicate frontend project and temp files
 frontend/frontend/
 TMP_*
+piper-voices/
 # Temporary uploads
 backend/temp_uploads/*
 !backend/temp_uploads/.gitkeep

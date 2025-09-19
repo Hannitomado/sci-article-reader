@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  piper:
+    build:
+      context: ./piper-server
+    container_name: piper
+    environment:
+      - PIPER_TIMEOUT_SEC=60
+      - MODELS_DIR=/opt/piper/models
+    volumes:
+      - ../piper-voices:/opt/piper/models:ro
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/healthz', timeout=3).read(); print('ok')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ondu-net
+    driver: bridge

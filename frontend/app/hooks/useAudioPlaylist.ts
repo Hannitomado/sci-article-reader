@@ -16,6 +16,8 @@ export function useAudioPlaylist() {
   const [notice, setNotice] = useState<string | null>(null);
   const prefetchRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedIdRef = useRef<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const retryTimerRef = useRef<number | null>(null);
 
   const progress = useMemo(
     () => (duration > 0 ? currentTime / duration : 0),
@@ -88,6 +90,11 @@ export function useAudioPlaylist() {
     setHasMetadata(false);
     setDuration(0);
     setCurrentTime(0);
+    setRetryCount(0);
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     // reset prefetch tracking for new active
     prefetchedIdRef.current = null;
     if (isPlaying) {
@@ -123,8 +130,24 @@ export function useAudioPlaylist() {
     const onPause = () => setIsPlaying(false);
     const onError = () => {
       const track = list[activeIndex];
-      console.warn("Audio error, skipping", track?.id, track?.audio_url);
-      setNotice(`Audio failed for ${track?.id ?? "unknown"}, skipping…`);
+      const maxRetries = 10;
+      if (retryCount < maxRetries) {
+        const delay = Math.min(500 + retryCount * 300, 3000);
+        setNotice(`Waiting for audio to be ready… (retry ${retryCount + 1}/${maxRetries})`);
+        setRetryCount(retryCount + 1);
+        if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = window.setTimeout(() => {
+          if (!audioRef.current) return;
+          const url = new URL(track.audio_url, window.location.origin);
+          url.searchParams.set("_", String(Date.now()));
+          audioRef.current!.src = url.toString();
+          audioRef.current!.load();
+          if (isPlaying) audioRef.current!.play().catch(() => {});
+        }, delay) as unknown as number;
+        return;
+      }
+      console.warn("Audio error after retries, skipping", track?.id, track?.audio_url);
+      setNotice(`Audio unavailable for ${track?.id ?? "unknown"}, skipping…`);
       next();
     };
     const onLoadedMetadata = () => {
@@ -146,7 +169,7 @@ export function useAudioPlaylist() {
       a.removeEventListener("error", onError);
       a.removeEventListener("loadedmetadata", onLoadedMetadata);
     };
-  }, [activeIndex, list, next, hasEverPlayed]);
+  }, [activeIndex, list, next, hasEverPlayed, retryCount, isPlaying]);
 
   return {
     audioRef,

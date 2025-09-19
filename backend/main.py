@@ -26,7 +26,7 @@ if (not SETTINGS.STRICT_MODE) or SETTINGS.USE_LLM_TITLE:
     client = OpenAI(api_key=OPENAI_API_KEY)
 
 
-from fastapi import UploadFile, File, FastAPI, HTTPException
+from fastapi import UploadFile, File, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -269,7 +269,7 @@ def heuristic_title(raw_text: str, filename: str) -> str:
 
 # Upload and process the article
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = File(...)):
     # Read once with a hard cap
     blob = await file.read(MAX_BYTES + 1)
     if len(blob) > MAX_BYTES:
@@ -319,10 +319,16 @@ async def upload_file(file: UploadFile = File(...)):
         "paragraphs": []
     }
 
+    # Optional per-request provider override via query param ?tts=
+    tts_override = request.query_params.get("tts")
+    voice_override = request.query_params.get("voice")
+
+    # Choose delivery extension
+    delivery_ext = (getattr(SETTINGS, "TTS_DELIVERY_FORMAT", "mp3") or "mp3").lower()
     for i, p in enumerate(chunks):
-        filename = f"{article_code}_{i+1}.wav"
+        filename = f"{article_code}_{i+1}.{delivery_ext}"
         task = generate_audio_task.apply_async(
-            args=[p, filename, article_code, "Male"],
+            args=[p, filename, article_code, "Male", tts_override, voice_override],
             queue="audio"
         )
         # Store API-friendly fields; keep task_id for internal use if needed
@@ -366,9 +372,32 @@ def get_article(article_id: str):
         q = dict(p)
         if "id" not in q:
             q["id"] = f"p{idx+1}"
-        if "audio_url" not in q:
-            filename = q.get("audio") or f"{article_id}_{idx+1}.wav"
-            q["audio_url"] = f"/static/{filename}"
+        # Build/repair audio_url so it matches an existing file on disk
+        delivery_ext = (getattr(SETTINGS, "TTS_DELIVERY_FORMAT", "mp3") or "mp3").lower()
+        # Prefer existing field, else construct
+        audio_url = q.get("audio_url")
+        if not audio_url:
+            filename = q.get("audio") or f"{article_id}_{idx+1}.{delivery_ext}"
+            audio_url = f"/static/{filename}"
+
+        # Check existence; if missing, try alternate extensions
+        try:
+            if audio_url.startswith("/static/"):
+                rel = audio_url[len("/static/"):]
+            else:
+                rel = audio_url
+            base_path = os.path.join(SETTINGS.AUDIO_OUT_DIR, rel)
+            if not os.path.exists(base_path):
+                root, ext = os.path.splitext(base_path)
+                # Try .mp3, .wav, .ogg in that order
+                for alt_ext in (".mp3", ".wav", ".ogg"):
+                    alt = root + alt_ext
+                    if os.path.exists(alt):
+                        audio_url = "/static/" + os.path.relpath(alt, SETTINGS.AUDIO_OUT_DIR).replace("\\", "/")
+                        break
+        except Exception:
+            pass
+        q["audio_url"] = audio_url
         # Ensure text is present and unmodified from stored value
         if "text" not in q:
             q["text"] = p.get("text", "")
@@ -385,9 +414,11 @@ def delete_article(article_id: str):
     return {"error": "File not found"}
 
 @app.post("/generate_audio/")
-def generate_audio(req: AudioRequest):
-    task = generate_audio_task.delay(req.text, req.audio_filename, req.article_title, req.gender)
-    return {"status": "queued", "task_id": task.id}
+def generate_audio(req: AudioRequest, request: Request):
+    tts_override = request.query_params.get("tts")
+    voice_override = request.query_params.get("voice")
+    task = generate_audio_task.delay(req.text, req.audio_filename, req.article_title, req.gender, tts_override, voice_override)
+    return {"status": "queued", "task_id": task.id, "provider_forced": tts_override or None, "voice_forced": voice_override or None}
 
 @app.get("/task_status/{task_id}")
 def get_task_status(task_id: str):
@@ -397,6 +428,34 @@ def get_task_status(task_id: str):
         "status": result.status,
         "result": result.result if result.ready() else None
     }
+
+@app.get("/health/tts")
+def health_tts():
+    """Report basic provider/encoder health without side effects."""
+    from .tts.registry import get_provider, list_providers
+    from shutil import which
+
+    openai_status = "ok" if get_provider("openai") is not None and os.getenv("OPENAI_API_KEY") else "fail"
+    piper_status = "fail"
+    if get_provider("piper") is not None:
+        if (getattr(SETTINGS, "PIPER_MODE", "HTTP").upper() == "HTTP"):
+            import httpx
+            try:
+                url = getattr(SETTINGS, "PIPER_URL", "http://piper:5000").rstrip("/") + "/healthz"
+                r = httpx.get(url, timeout=3.0)
+                piper_status = "ok" if (r.status_code == 200 and r.json().get("status") == "ok") else "fail"
+            except Exception:
+                piper_status = "fail"
+        else:
+            # CLI mode — assume present if model path provided
+            piper_status = "ok" if getattr(SETTINGS, "PIPER_MODEL_PATH", "") else "fail"
+    encoder_status = "ok" if which(getattr(SETTINGS, "FFMPEG_PATH", "ffmpeg")) else "missing"
+    return {"openai": openai_status, "piper": piper_status, "encoder": encoder_status}
+
+@app.get("/admin/tts/providers")
+def admin_list_providers():
+    from .tts.registry import list_providers
+    return {"providers": list_providers()}
 
 @app.get("/ping_celery")
 def ping_test():

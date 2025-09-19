@@ -53,6 +53,25 @@ class _Settings:
     TTS_VOICE: str
     TTS_FORMAT: str
     TTS_SAMPLE_RATE: int
+    # Encoding / tools
+    FFMPEG_PATH: str
+    # New TTS plumbing
+    TTS_PROVIDER: str
+    TTS_PROVIDER_ORDER: str
+    TTS_RATE: int
+    TTS_VOICE_EN: str
+    TTS_VOICE_SV: str
+    # Piper
+    PIPER_MODE: str
+    PIPER_URL: str
+    PIPER_MODEL_PATH: str
+    PIPER_DEFAULT_VOICE: str
+    PIPER_TIMEOUT_SEC: int
+    PIPER_BIN: str
+    # Delivery
+    TTS_DELIVERY_FORMAT: str
+    TTS_KEEP_WAV_MASTER: bool
+    TTS_ENCODER_OFFSET_MS: int
 
     # Strict cleaning and chunking
     STRICT_MODE: bool
@@ -79,6 +98,24 @@ def _build_settings() -> _Settings:
     tts_voice = os.getenv("TTS_VOICE", "onyx")
     tts_format = os.getenv("TTS_FORMAT", "wav")
     tts_sample_rate = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
+    ffmpeg_path = os.getenv("FFMPEG_PATH", "ffmpeg")
+    # New TTS plumbing defaults (use openai by default to preserve behavior)
+    tts_provider = os.getenv("TTS_PROVIDER", "openai")
+    tts_provider_order = os.getenv("TTS_PROVIDER_ORDER", "openai")
+    tts_rate = int(os.getenv("TTS_RATE", "0"))
+    tts_voice_en = os.getenv("TTS_VOICE_EN", "onyx")
+    tts_voice_sv = os.getenv("TTS_VOICE_SV", "sv-SE-nst")
+    # Piper
+    piper_mode = os.getenv("PIPER_MODE", "HTTP").upper()
+    piper_url = os.getenv("PIPER_URL", "http://localhost:5000")
+    piper_model_path = os.getenv("PIPER_MODEL_PATH", "")
+    piper_default_voice = os.getenv("PIPER_DEFAULT_VOICE", "sv-SE-nst")
+    piper_timeout = int(os.getenv("PIPER_TIMEOUT_SEC", "60"))
+    piper_bin = os.getenv("PIPER_BIN", "piper")
+    # Delivery / encoding
+    tts_delivery_format = os.getenv("TTS_DELIVERY_FORMAT", "mp3").lower()
+    keep_wav_master = str(os.getenv("TTS_KEEP_WAV_MASTER", "false")).strip().lower() in {"1","true","yes","on"}
+    encoder_offset_ms = int(os.getenv("TTS_ENCODER_OFFSET_MS", "0"))
 
     def _get_bool(name: str, default: bool) -> bool:
         val = os.getenv(name)
@@ -104,6 +141,21 @@ def _build_settings() -> _Settings:
         TTS_VOICE=tts_voice,
         TTS_FORMAT=tts_format,
         TTS_SAMPLE_RATE=tts_sample_rate,
+        FFMPEG_PATH=ffmpeg_path,
+        TTS_PROVIDER=tts_provider,
+        TTS_PROVIDER_ORDER=tts_provider_order,
+        TTS_RATE=tts_rate,
+        TTS_VOICE_EN=tts_voice_en,
+        TTS_VOICE_SV=tts_voice_sv,
+        PIPER_MODE=piper_mode,
+        PIPER_URL=piper_url,
+        PIPER_MODEL_PATH=piper_model_path,
+        PIPER_DEFAULT_VOICE=piper_default_voice,
+        PIPER_TIMEOUT_SEC=piper_timeout,
+        PIPER_BIN=piper_bin,
+        TTS_DELIVERY_FORMAT=tts_delivery_format,
+        TTS_KEEP_WAV_MASTER=keep_wav_master,
+        TTS_ENCODER_OFFSET_MS=encoder_offset_ms,
         STRICT_MODE=strict_mode,
         USE_LLM_TITLE=use_llm_title,
         REMOVE_CITATIONS=remove_citations,
