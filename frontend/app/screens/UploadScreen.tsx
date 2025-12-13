@@ -29,16 +29,18 @@ export default function UploadScreen({ onBack }: Props) {
     }
 
     try {
-      const res = await fetch('http://localhost:8080/upload', {
+      // ✅ Relative URL so Next rewrites proxy to FastAPI
+      const res = await fetch('/upload', {
         method: 'POST',
         body: formData,
       });
+
       const data = await res.json();
+
       if (res.ok && data.id) {
         setMessage('Upload successful! Redirecting...');
         setText('');
         setFile(null);
-        // Redirect to the converted article using the returned id
         window.location.href = `/converted/${data.id}`;
       } else {
         setMessage(data.detail || 'Upload failed.');

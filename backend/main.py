@@ -32,6 +32,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from celery.result import AsyncResult
+from backend.celery_config import celery_app
 
 from .tasks import generate_audio_task
 from .celery_config import celery_app
@@ -431,27 +432,47 @@ def get_task_status(task_id: str):
 
 @app.get("/health/tts")
 def health_tts():
-    """Report basic provider/encoder health without side effects."""
-    from .tts.registry import get_provider, list_providers
+    """Report provider/encoder health based on actual configuration and binaries."""
+    from pathlib import Path
     from shutil import which
 
-    openai_status = "ok" if get_provider("openai") is not None and os.getenv("OPENAI_API_KEY") else "fail"
-    piper_status = "fail"
-    if get_provider("piper") is not None:
-        if (getattr(SETTINGS, "PIPER_MODE", "HTTP").upper() == "HTTP"):
-            import httpx
-            try:
-                url = getattr(SETTINGS, "PIPER_URL", "http://piper:5000").rstrip("/") + "/healthz"
-                r = httpx.get(url, timeout=3.0)
-                piper_status = "ok" if (r.status_code == 200 and r.json().get("status") == "ok") else "fail"
-            except Exception:
-                piper_status = "fail"
-        else:
-            # CLI mode — assume present if model path provided
-            piper_status = "ok" if getattr(SETTINGS, "PIPER_MODEL_PATH", "") else "fail"
-    encoder_status = "ok" if which(getattr(SETTINGS, "FFMPEG_PATH", "ffmpeg")) else "missing"
-    return {"openai": openai_status, "piper": piper_status, "encoder": encoder_status}
+    # --- OpenAI: "ok" if key is present (provider can be instantiated later)
+    openai_status = "ok" if os.getenv("OPENAI_API_KEY") else "fail"
 
+    # --- Piper: check based on mode, not registry state
+    piper_status = "fail"
+    piper_mode = getattr(SETTINGS, "PIPER_MODE", "HTTP").upper()
+
+    if piper_mode == "HTTP":
+        import httpx
+        try:
+            url = getattr(SETTINGS, "PIPER_URL", "http://piper:5000").rstrip("/") + "/healthz"
+            r = httpx.get(url, timeout=3.0)
+            piper_status = "ok" if (r.status_code == 200 and r.json().get("status") == "ok") else "fail"
+        except Exception:
+            piper_status = "fail"
+    else:
+        # CLI mode: verify binary + model exist
+        model_path = Path(getattr(SETTINGS, "PIPER_MODEL_PATH", ""))
+        bin_path = Path(getattr(SETTINGS, "PIPER_BIN", ""))
+
+        has_model = model_path.is_file()
+        has_bin = bin_path.is_file()
+
+        piper_status = "ok" if (has_model and has_bin) else "fail"
+
+    # --- Encoder (ffmpeg): works if command is found OR explicit path exists
+    ffmpeg_cmd = getattr(SETTINGS, "FFMPEG_PATH", "ffmpeg")
+    encoder_ok = False
+    try:
+        ffmpeg_path = Path(ffmpeg_cmd)
+        encoder_ok = ffmpeg_path.is_file() if ffmpeg_path.suffix.lower() == ".exe" else bool(which(ffmpeg_cmd))
+    except Exception:
+        encoder_ok = bool(which("ffmpeg"))
+
+    encoder_status = "ok" if encoder_ok else "missing"
+
+    return {"openai": openai_status, "piper": piper_status, "encoder": encoder_status}
 @app.get("/admin/tts/providers")
 def admin_list_providers():
     from .tts.registry import list_providers

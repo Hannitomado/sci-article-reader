@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 interface Paragraph {
   text: string;
-  audio: string;
+  audio: string;   // expected to be filename (e.g., "article_..._1.wav") or similar
   task_id: string;
 }
 
@@ -18,7 +18,7 @@ export default function CleanedArticlePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/cleaned-article')
+    fetch('/api/cleaned-article')
       .then((res) => res.json())
       .then((data) => {
         console.log('Loaded cleaned article:', data);
@@ -44,7 +44,7 @@ export default function CleanedArticlePage() {
 
           <audio controls className="w-full mt-2">
             <source
-              src={`http://localhost:8080/static/${encodeURIComponent(para.audio)}`}
+              src={`/static/${encodeURIComponent(para.audio)}`}
               type="audio/wav"
             />
             Your browser does not support the audio element.

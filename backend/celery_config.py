@@ -9,7 +9,11 @@ BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
 load_dotenv(ENV_PATH, override=False)
 
-celery_app = Celery("tts_tasks")
+celery_app = Celery(
+    "tts_tasks",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/0",
+)
 
 # Ensure redis client library is present and compatible (clear error early)
 try:

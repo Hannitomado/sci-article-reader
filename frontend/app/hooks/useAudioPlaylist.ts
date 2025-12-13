@@ -2,7 +2,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type Track = { id: string; text: string; audio_url: string };
+export type Track = {
+  id: string;
+  text: string;
+  audio_url: string;
+  task_id?: string; // <-- added so ReaderPage can show status badges safely
+};
 
 export function useAudioPlaylist() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -14,10 +19,18 @@ export function useAudioPlaylist() {
   const [hasMetadata, setHasMetadata] = useState(false);
   const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
   const prefetchRef = useRef<HTMLAudioElement | null>(null);
   const prefetchedIdRef = useRef<string | null>(null);
+
   const [retryCount, setRetryCount] = useState(0);
+  const retryCountRef = useRef(0);
   const retryTimerRef = useRef<number | null>(null);
+
+  // Keep retry ref in sync
+  useEffect(() => {
+    retryCountRef.current = retryCount;
+  }, [retryCount]);
 
   const progress = useMemo(
     () => (duration > 0 ? currentTime / duration : 0),
@@ -25,19 +38,22 @@ export function useAudioPlaylist() {
   );
 
   const load = useCallback((tracks: Track[], startIndex = 0) => {
-    const filtered = tracks.filter(t => (t.text ?? "").trim().length > 0);
+    const filtered = tracks.filter((t) => (t.text ?? "").trim().length > 0);
     setList(filtered);
     setActiveIndex(Math.max(0, Math.min(startIndex, filtered.length - 1)));
   }, []);
 
-  const setIndex = useCallback((i: number) => {
-    setActiveIndex((prev) => {
-      if (i < 0) return 0;
-      if (!list.length) return 0;
-      if (i >= list.length) return list.length - 1;
-      return i;
-    });
-  }, [list.length]);
+  const setIndex = useCallback(
+    (i: number) => {
+      setActiveIndex(() => {
+        if (i < 0) return 0;
+        if (!list.length) return 0;
+        if (i >= list.length) return list.length - 1;
+        return i;
+      });
+    },
+    [list.length]
+  );
 
   const play = useCallback(async () => {
     const a = audioRef.current;
@@ -84,19 +100,24 @@ export function useAudioPlaylist() {
   useEffect(() => {
     const a = audioRef.current;
     if (!a || list.length === 0) return;
+
     const track = list[activeIndex];
     a.src = track.audio_url;
     a.load();
+
     setHasMetadata(false);
     setDuration(0);
     setCurrentTime(0);
+
     setRetryCount(0);
     if (retryTimerRef.current) {
       window.clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
     }
+
     // reset prefetch tracking for new active
     prefetchedIdRef.current = null;
+
     if (isPlaying) {
       a.play().catch(() => {});
     }
@@ -110,6 +131,7 @@ export function useAudioPlaylist() {
     const onTime = () => {
       setCurrentTime(a.currentTime || 0);
       setDuration(a.duration || 0);
+
       // Lightweight single prefetch ~85%
       if (a.duration && a.currentTime / a.duration > 0.85) {
         const nextTrack = list[activeIndex + 1];
@@ -122,34 +144,50 @@ export function useAudioPlaylist() {
         }
       }
     };
+
     const onEnd = () => next();
+
     const onPlay = () => {
       setIsPlaying(true);
       if (!hasEverPlayed) setHasEverPlayed(true);
     };
+
     const onPause = () => setIsPlaying(false);
+
     const onError = () => {
       const track = list[activeIndex];
       const maxRetries = 10;
-      if (retryCount < maxRetries) {
-        const delay = Math.min(500 + retryCount * 300, 3000);
-        setNotice(`Waiting for audio to be ready… (retry ${retryCount + 1}/${maxRetries})`);
-        setRetryCount(retryCount + 1);
+
+      const currentRetry = retryCountRef.current;
+
+      if (currentRetry < maxRetries) {
+        const delay = Math.min(500 + currentRetry * 300, 3000);
+
+        setNotice(`Waiting for audio to be ready… (retry ${currentRetry + 1}/${maxRetries})`);
+
+        setRetryCount((c) => c + 1);
+
         if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+
         retryTimerRef.current = window.setTimeout(() => {
-          if (!audioRef.current) return;
+          const player = audioRef.current;
+          if (!player) return;
+
           const url = new URL(track.audio_url, window.location.origin);
-          url.searchParams.set("_", String(Date.now()));
-          audioRef.current!.src = url.toString();
-          audioRef.current!.load();
-          if (isPlaying) audioRef.current!.play().catch(() => {});
+          url.searchParams.set("_", String(Date.now())); // cache-buster
+          player.src = url.toString();
+          player.load();
+          if (isPlaying) player.play().catch(() => {});
         }, delay) as unknown as number;
+
         return;
       }
+
       console.warn("Audio error after retries, skipping", track?.id, track?.audio_url);
       setNotice(`Audio unavailable for ${track?.id ?? "unknown"}, skipping…`);
       next();
     };
+
     const onLoadedMetadata = () => {
       setHasMetadata(isFinite(a.duration) && a.duration > 0);
       setDuration(a.duration || 0);
@@ -161,6 +199,7 @@ export function useAudioPlaylist() {
     a.addEventListener("pause", onPause);
     a.addEventListener("error", onError);
     a.addEventListener("loadedmetadata", onLoadedMetadata);
+
     return () => {
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnd);
@@ -169,16 +208,27 @@ export function useAudioPlaylist() {
       a.removeEventListener("error", onError);
       a.removeEventListener("loadedmetadata", onLoadedMetadata);
     };
-  }, [activeIndex, list, next, hasEverPlayed, retryCount, isPlaying]);
+  }, [activeIndex, list, next, hasEverPlayed, isPlaying]);
 
   return {
     audioRef,
-    list, load,
-    activeIndex, setIndex,
-    isPlaying, play, pause, toggle,
-    currentTime, duration, progress,
-    hasMetadata, hasEverPlayed,
-    notice, setNotice,
-    next, prev, seek,
+    list,
+    load,
+    activeIndex,
+    setIndex,
+    isPlaying,
+    play,
+    pause,
+    toggle,
+    currentTime,
+    duration,
+    progress,
+    hasMetadata,
+    hasEverPlayed,
+    notice,
+    setNotice,
+    next,
+    prev,
+    seek,
   };
 }
