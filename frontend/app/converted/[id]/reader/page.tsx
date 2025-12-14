@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useAudioPlaylist } from "@/app/hooks/useAudioPlaylist";
 import WordHighlighter from "@/app/components/WordHighlighter";
-import { tokenizeParagraph, mergeTimings, findActiveWordIndex } from "@/app/lib/textTiming";
-import { useParams, useRouter } from "next/navigation";
+import {
+  tokenizeParagraph,
+  mergeTimings,
+  findActiveWordIndex,
+} from "@/app/lib/textTiming";
 
 type Paragraph = {
   id: string;
@@ -17,7 +21,6 @@ type Article = { id: string; title: string; paragraphs: Paragraph[] };
 
 type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE" | "RETRY";
 
-// Backend might return {state: "..."} instead of {status: "..."} so we accept both.
 type TaskResp = {
   task_id?: string;
   status?: TaskStatus | string;
@@ -35,6 +38,83 @@ function normalizeStatus(raw?: string | null): TaskStatus {
   return "PENDING";
 }
 
+function formatTime(s: number) {
+  if (!isFinite(s) || s < 0) return "0:00";
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${m}:${sec}`;
+}
+
+function clipPreview(text: string, max = 140) {
+  const t = (text ?? "").replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max).trim()}…`;
+}
+
+function isAudioUrlReady(audioUrl?: string | null) {
+  const u = (audioUrl ?? "").trim();
+  return u.startsWith("/static/");
+}
+
+function isReadyFromStatus(status: TaskStatus | undefined) {
+  return status === "SUCCESS";
+}
+
+function LedDot({
+  ready,
+  ariaLabel,
+}: {
+  ready: boolean;
+  ariaLabel: string;
+}) {
+  return (
+    <span
+      className={`ondu-led ${ready ? "ondu-led--ready" : "ondu-led--notready"}`}
+      aria-label={ariaLabel}
+      role="img"
+      title={ariaLabel}
+    />
+  );
+}
+
+function IconPlay(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={props.className}
+      width="22"
+      height="22"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M9 7.6v8.8c0 .7.8 1.1 1.4.7l7.2-4.4c.6-.4.6-1.2 0-1.6l-7.2-4.4c-.6-.4-1.4 0-1.4.9z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconPause(props: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={props.className}
+      width="22"
+      height="22"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M8.5 6.8c0-.6.5-1.1 1.1-1.1h1.2c.6 0 1.1.5 1.1 1.1v10.4c0 .6-.5 1.1-1.1 1.1H9.6c-.6 0-1.1-.5-1.1-1.1V6.8zm7.2 0c0-.6.5-1.1 1.1-1.1H18c.6 0 1.1.5 1.1 1.1v10.4c0 .6-.5 1.1-1.1 1.1h-1.2c-.6 0-1.1-.5-1.1-1.1V6.8z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export default function ReaderPage() {
   const params = useParams();
   const router = useRouter();
@@ -43,20 +123,20 @@ export default function ReaderPage() {
   const [article, setArticle] = useState<Article | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
-  const [nowPlaying, setNowPlaying] = useState<string>("");
-  const [isScrubbing, setIsScrubbing] = useState(false);
-  const [currentTimings, setCurrentTimings] = useState<ReturnType<typeof mergeTimings> | null>(null);
+  const [taskStatusMap, setTaskStatusMap] = useState<Record<string, TaskStatus>>(
+    {}
+  );
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [hasFocus, setHasFocus] = useState(false);
-
-  // Task polling UI state
-  const [taskStatusMap, setTaskStatusMap] = useState<Record<string, TaskStatus>>({});
-
-  // Refs to avoid interval re-creation on every state update
   const articleRef = useRef<Article | null>(null);
   const statusRef = useRef<Record<string, TaskStatus>>({});
+
+  const [activeWordIndex, setActiveWordIndex] = useState<number | null>(null);
+  const [currentTimings, setCurrentTimings] = useState<
+    ReturnType<typeof mergeTimings> | null
+  >(null);
+
+  const [showReader, setShowReader] = useState(true);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   const {
     audioRef,
@@ -78,7 +158,6 @@ export default function ReaderPage() {
     setNotice,
   } = useAudioPlaylist();
 
-  // Keep refs in sync with state
   useEffect(() => {
     articleRef.current = article;
   }, [article]);
@@ -87,7 +166,6 @@ export default function ReaderPage() {
     statusRef.current = taskStatusMap;
   }, [taskStatusMap]);
 
-  // Fetch article and load tracks (skip empty text)
   useEffect(() => {
     if (!articleId) return;
 
@@ -106,10 +184,13 @@ export default function ReaderPage() {
 
         load(tracks as any, 0);
 
-        // Initialize statuses for paragraphs that have task_id
         const init: Record<string, TaskStatus> = {};
         for (const p of tracks) {
-          if (p.task_id) init[p.id] = "PENDING";
+          if (isAudioUrlReady(p.audio_url)) {
+            init[p.id] = "SUCCESS";
+          } else if (p.task_id) {
+            init[p.id] = "PENDING";
+          }
         }
         setTaskStatusMap(init);
       } catch (e: any) {
@@ -119,63 +200,72 @@ export default function ReaderPage() {
     })();
   }, [articleId, load]);
 
-  // Poll Celery task status and update audio URLs when ready
   useEffect(() => {
     if (!articleId) return;
 
     let alive = true;
     const intervalMs = 1500;
+    let intervalId: number | null = null;
+
+    const clear = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
 
     const pollOnce = async () => {
       if (!alive) return;
-
       const a = articleRef.current;
       if (!a) return;
 
-      // Only poll paragraphs that have task_id and are not SUCCESS/FAILURE yet
-      const pendingParas = a.paragraphs.filter((p) => {
+      const unresolved = a.paragraphs.filter((p) => {
         if (!p.task_id) return false;
+        if (isAudioUrlReady(p.audio_url)) return false;
+
         const st = statusRef.current[p.id];
-        return st !== "SUCCESS" && st !== "FAILURE";
+        return st !== "FAILURE" && st !== "SUCCESS";
       });
 
-      if (pendingParas.length === 0) return;
+      if (unresolved.length === 0) {
+        clear();
+        return;
+      }
 
       try {
         const results = await Promise.all(
-          pendingParas.map(async (p) => {
+          unresolved.map(async (p) => {
             const res = await fetch(`/task_status/${p.task_id}`);
             if (!res.ok) throw new Error(`task_status failed (${res.status})`);
             const data: TaskResp = await res.json();
 
-            // Accept either `status` or `state`
-            const st = normalizeStatus((data.status as string) ?? (data.state as string));
+            const st = normalizeStatus(
+              (data.status as string) ?? (data.state as string)
+            );
 
-            return { pid: p.id, para: p, status: st, result: data.result };
+            return { pid: p.id, status: st, result: data.result };
           })
         );
 
         if (!alive) return;
 
-        // Update status map
-        setTaskStatusMap((prev) => {
-          const nextMap = { ...prev };
+        setTaskStatusMap((prevMap) => {
+          const nextMap = { ...prevMap };
           for (const r of results) nextMap[r.pid] = r.status;
           return nextMap;
         });
 
-        // If any succeeded and returned a file path, update the article audio_url to /static/<filename>
         const succeeded = results.filter(
           (r) => r.status === "SUCCESS" && r.result?.path
         );
 
         if (succeeded.length > 0) {
-          setArticle((prev) => {
-            if (!prev) return prev;
+          setArticle((prevArticle) => {
+            if (!prevArticle) return prevArticle;
 
             const updated: Article = {
-              ...prev,
-              paragraphs: prev.paragraphs.map((pp) => ({ ...pp })),
+              ...prevArticle,
+              paragraphs: prevArticle.paragraphs.map((pp) => ({ ...pp })),
             };
 
             for (const s of succeeded) {
@@ -191,7 +281,6 @@ export default function ReaderPage() {
             return updated;
           });
 
-          // Refresh playlist tracks from the latest article (so new URLs are used)
           window.setTimeout(() => {
             const latest = articleRef.current;
             if (!latest) return;
@@ -203,30 +292,37 @@ export default function ReaderPage() {
             load(tracks as any, activeIndex);
           }, 0);
         }
+
+        const a2 = articleRef.current;
+        if (a2) {
+          const stillUnresolved = a2.paragraphs.some((p) => {
+            if (!p.task_id) return false;
+            if (isAudioUrlReady(p.audio_url)) return false;
+            const st = statusRef.current[p.id];
+            return st !== "FAILURE" && st !== "SUCCESS";
+          });
+          if (!stillUnresolved) clear();
+        }
       } catch (e) {
         console.warn("Task polling error:", e);
       }
     };
 
-    const t = window.setInterval(pollOnce, intervalMs);
+    intervalId = window.setInterval(pollOnce, intervalMs);
     pollOnce();
 
     return () => {
       alive = false;
-      window.clearInterval(t);
+      clear();
     };
   }, [articleId, load, activeIndex]);
 
-  // Token cache by paragraph id
   const tokenMap = useMemo(() => {
     const map = new Map<string, ReturnType<typeof tokenizeParagraph>>();
-    for (const p of list) {
-      map.set(p.id, tokenizeParagraph(p.text));
-    }
+    for (const p of list) map.set(p.id, tokenizeParagraph(p.text));
     return map;
   }, [list]);
 
-  // Build timings when duration changes or active track changes
   useEffect(() => {
     const track = list[activeIndex];
     if (!track || !hasMetadata) {
@@ -235,205 +331,286 @@ export default function ReaderPage() {
     }
     const toks = tokenMap.get(track.id) ?? [];
     setCurrentTimings(mergeTimings(toks, undefined, duration));
-    setNowPlaying(`Now playing paragraph ${activeIndex + 1}`);
   }, [list, activeIndex, hasMetadata, duration, tokenMap]);
 
-  // Update active word index with current time
   useEffect(() => {
     if (!currentTimings) {
       setActiveWordIndex(null);
       return;
     }
-    const idx = findActiveWordIndex(currentTimings, currentTime);
-    setActiveWordIndex(idx);
+    setActiveWordIndex(findActiveWordIndex(currentTimings, currentTime));
   }, [currentTimings, currentTime]);
 
-  // Scroll into view on paragraph change (suppress while scrubbing)
   useEffect(() => {
     if (isScrubbing) return;
     const track = list[activeIndex];
     if (!track) return;
-    const el = document.getElementById(`para-${track.id}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const el = document.getElementById(`queue-${track.id}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [activeIndex, list, isScrubbing]);
 
-  // Keyboard shortcuts scoped to this reader
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!hasFocus) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        toggle();
-      }
-      if (e.code === "ArrowRight") {
-        e.preventDefault();
-        next();
-      }
-      if (e.code === "ArrowLeft") {
-        e.preventDefault();
-        prev();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggle, next, prev, hasFocus]);
+  if (!articleId) return <div className="text-red-600">Invalid article id.</div>;
+  if (error) return <div className="text-red-600">{error}</div>;
+  if (!article) return <div className="ondu-muted">Loading…</div>;
 
-  if (!articleId) return <div className="p-6 text-red-600">Invalid article id.</div>;
-  if (error) return <div className="p-6 text-red-600">{error}</div>;
-  if (!article) return <div className="p-6">Loading…</div>;
+  const nonEmptyParas = article.paragraphs.filter(
+    (p) => (p.text ?? "").trim().length > 0
+  );
 
-  // Progress UI derived from tracked tasks
-  const trackedCount = article.paragraphs.filter(
-    (p) => (p.text ?? "").trim().length > 0 && p.task_id
-  ).length;
+  const readyCount = nonEmptyParas.filter((p) => isAudioUrlReady(p.audio_url))
+    .length;
 
-  const doneCount = Object.values(taskStatusMap).filter((s) => s === "SUCCESS").length;
-  const failCount = Object.values(taskStatusMap).filter((s) => s === "FAILURE").length;
-  const pct = trackedCount > 0 ? Math.round((doneCount / trackedCount) * 100) : 100;
+  const totalCount = nonEmptyParas.length;
+  const pct = totalCount > 0 ? Math.round((readyCount / totalCount) * 100) : 100;
+
+  const activeTrack = list[activeIndex];
+  const activeReady =
+    activeTrack ? isAudioUrlReady(activeTrack.audio_url) : true;
 
   return (
-    <div
-      ref={containerRef}
-      tabIndex={0}
-      onFocus={() => setHasFocus(true)}
-      onBlur={() => setHasFocus(false)}
-      className="container mx-auto p-4 space-y-4 outline-none"
-    >
-      <h1 className="text-2xl font-semibold">{article.title}</h1>
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
+            {article.title}
+          </h1>
+          <p className="mt-1 text-sm ondu-muted">
+            {list.length} paragraphs • {readyCount}/{totalCount} audio ready
+          </p>
+        </div>
 
-      {/* Audio generation progress */}
-      {trackedCount > 0 && (
-        <div className="rounded-2xl p-4 border border-slateViolet/50 bg-[#f7f8fc] text-inkBlack">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span>Audio generation</span>
-            <span className="tabular-nums">
-              {doneCount}/{trackedCount} ready{failCount ? `, ${failCount} failed` : ""}
-            </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.back()}
+            className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
+          >
+            Back
+          </button>
+          <button
+            onClick={() => setShowReader((v) => !v)}
+            className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
+          >
+            {showReader ? "Hide text" : "Show text"}
+          </button>
+        </div>
+      </div>
+
+      {totalCount > 0 && (
+        <div className="ondu-surface-panel px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">Audio</div>
+              <div className="text-xs ondu-muted">
+                {pct < 100 ? "Preparing audio." : "All ready."}
+              </div>
+            </div>
+            <div className="text-sm tabular-nums">
+              {readyCount}/{totalCount}
+            </div>
           </div>
-          <div className="h-2 w-full bg-black/10 rounded">
-            <div className="h-2 rounded bg-black/40" style={{ width: `${pct}%` }} />
-          </div>
-          <div className="text-xs opacity-70 mt-2">
-            {pct < 100 ? "Generating audio in the background…" : "All audio ready."}
+
+          <div className="mt-2 h-2 w-full rounded-full bg-[color:color-mix(in_srgb,var(--text-primary)_12%,transparent)]">
+            <div
+              className="h-2 rounded-full bg-[color:var(--accent)]"
+              style={{ width: `${pct}%` }}
+              aria-label="Audio readiness progress"
+            />
           </div>
         </div>
       )}
 
-      <div className="rounded-2xl p-4 border border-slateViolet/50 shadow bg-[#f7f8fc] text-inkBlack flex flex-wrap items-center gap-3 sticky top-2">
+      <section className="ondu-surface-solid p-4 sm:p-5">
         <audio ref={audioRef} preload="metadata" />
 
-        <button
-          onClick={() => router.back()}
-          className="px-3 py-1 rounded-2xl border shadow hover:shadow-lg"
-          aria-label="Back"
-        >
-          Back
-        </button>
-
-        <button
-          onClick={toggle}
-          className="px-3 py-1 rounded-2xl shadow border hover:shadow-lg"
-          aria-label={isPlaying ? "Pause" : "Play"}
-        >
-          {isPlaying ? "Pause" : "Play"}
-        </button>
-
-        {!hasEverPlayed && <span className="text-xs opacity-70">Click Play to start audio</span>}
-
-        <button onClick={prev} className="px-2 py-1 border rounded" aria-label="Previous paragraph">
-          ⟨ Prev
-        </button>
-        <button onClick={next} className="px-2 py-1 border rounded" aria-label="Next paragraph">
-          Next ⟩
-        </button>
-
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.001}
-          value={progress}
-          onMouseDown={() => setIsScrubbing(true)}
-          onTouchStart={() => setIsScrubbing(true)}
-          onMouseUp={() => setIsScrubbing(false)}
-          onTouchEnd={() => setIsScrubbing(false)}
-          onChange={(e) => {
-            const r = parseFloat(e.target.value);
-            seek(r);
-            if (currentTimings && duration) {
-              const t = Math.max(0, Math.min(duration * r, duration - 0.01));
-              const idx = findActiveWordIndex(currentTimings, t);
-              setActiveWordIndex(idx);
-            }
-          }}
-          className="w-64 md:w-96"
-          aria-label="Progress"
-          aria-valuemin={0}
-          aria-valuemax={1}
-          aria-valuenow={progress}
-          disabled={!hasMetadata}
-        />
-
-        <span className="w-32 text-right tabular-nums ml-auto">
-          {hasMetadata ? `${formatTime(currentTime)} / ${formatTime(duration)}` : "Loading audio…"}
-        </span>
-
-        <span className="sr-only" aria-live="polite">
-          {nowPlaying}
-        </span>
-
-        {notice && <span className="text-xs text-amber-700">{notice}</span>}
-      </div>
-
-      <div className="space-y-6">
-        {list.map((p, i) => {
-          const status = taskStatusMap[p.id];
-          const showBadge = Boolean(p.task_id);
-
-          return (
-            <div
-              id={`para-${p.id}`}
-              key={p.id}
-              className={`rounded-2xl p-4 bg-[#f7f8fc] text-inkBlack shadow-sm ${
-                i === activeIndex ? "ring-2 ring-blue-400" : "border border-slateViolet/50"
-              }`}
-              onClick={() => setIndex(i)}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setNotice(null);
+                toggle();
+              }}
+              className="ondu-icon-btn ondu-icon-btn--lg"
+              aria-label={isPlaying ? "Pause" : "Play"}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm opacity-60">Paragraph {i + 1}</div>
+              {isPlaying ? <IconPause /> : <IconPlay />}
+            </button>
 
-                {showBadge && (
-                  <div className="text-xs px-2 py-1 rounded border opacity-80 tabular-nums">
-                    {status ?? "PENDING"}
-                  </div>
-                )}
+            <div className="min-w-0">
+              <div className="text-xs ondu-muted">Now playing</div>
+
+              <div className="flex items-center gap-2">
+                <LedDot
+                  ready={activeReady}
+                  ariaLabel={activeReady ? "Audio ready" : "Audio not ready"}
+                />
+                <div className="text-sm sm:text-base font-semibold truncate">
+                  {activeTrack ? `Paragraph ${activeIndex + 1}` : "—"}
+                </div>
               </div>
 
-              <WordHighlighter
-                text={p.text}
-                activeWordIndex={i === activeIndex ? activeWordIndex : null}
-              />
+              {!hasEverPlayed && (
+                <div className="mt-1 text-xs ondu-muted">
+                  Press play and let it run. Tap a paragraph below to jump.
+                </div>
+              )}
             </div>
-          );
-        })}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={prev}
+                  className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
+                  aria-label="Previous"
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={next}
+                  className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
+                  aria-label="Next"
+                >
+                  Next
+                </button>
+              </div>
+
+              <div className="text-xs tabular-nums ondu-muted">
+                {hasMetadata
+                  ? `${formatTime(currentTime)} / ${formatTime(duration)}`
+                  : "Loading…"}
+              </div>
+            </div>
+
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.001}
+              value={progress}
+              onMouseDown={() => setIsScrubbing(true)}
+              onTouchStart={() => setIsScrubbing(true)}
+              onMouseUp={() => setIsScrubbing(false)}
+              onTouchEnd={() => setIsScrubbing(false)}
+              onChange={(e) => {
+                const r = parseFloat(e.target.value);
+                seek(r);
+
+                if (currentTimings && duration) {
+                  const t = Math.max(0, Math.min(duration * r, duration - 0.01));
+                  setActiveWordIndex(findActiveWordIndex(currentTimings, t));
+                }
+              }}
+              className="mt-3 w-full accent-[color:var(--accent)]"
+              aria-label="Progress"
+              disabled={!hasMetadata}
+            />
+
+            {notice && <div className="mt-2 text-xs ondu-muted">{notice}</div>}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1.2fr]">
+        <section className="ondu-surface-panel overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--border)]">
+            <div className="text-sm font-semibold">Queue</div>
+            <div className="text-xs ondu-muted tabular-nums">
+              {activeIndex + 1}/{list.length}
+            </div>
+          </div>
+
+          <div className="max-h-[60vh] overflow-auto">
+            {list.map((p, i) => {
+              const isActive = i === activeIndex;
+              const ready = isAudioUrlReady(p.audio_url);
+
+              return (
+                <button
+                  key={p.id}
+                  id={`queue-${p.id}`}
+                  onClick={() => setIndex(i)}
+                  className={[
+                    "w-full text-left px-4 py-3 border-b border-[color:var(--border)] transition",
+                    // ✅ FIX: theme-safe active background (no Tailwind dark variant, no white/black keywords)
+                    isActive
+                      ? "bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))]"
+                      : "hover:bg-[color:color-mix(in_srgb,var(--surface)_45%,transparent)]",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-1">
+                      <LedDot
+                        ready={ready}
+                        ariaLabel={ready ? "Audio ready" : "Audio not ready"}
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold">
+                          Paragraph {i + 1}
+                        </div>
+                        {isActive && (
+                          <span className="text-[11px] font-medium text-[color:var(--text-secondary)]">
+                            Playing
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-1 text-xs ondu-muted">
+                        {clipPreview(p.text, 160)}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {showReader && (
+          <section className="ondu-surface-solid p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs ondu-muted">Reading</div>
+                <div className="text-base font-semibold">
+                  {activeTrack ? `Paragraph ${activeIndex + 1}` : "—"}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowReader(false)}
+                className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
+              >
+                Hide
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="ondu-reader">
+                {activeTrack ? (
+                  <WordHighlighter
+                    text={activeTrack.text}
+                    activeWordIndex={activeWordIndex}
+                  />
+                ) : (
+                  <div className="ondu-muted">No paragraph selected.</div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
-      <div className="flex justify-center py-6">
+      <div className="flex justify-center pt-2">
         <button
           onClick={() => router.back()}
-          className="px-4 py-2 rounded-2xl border shadow hover:shadow-lg"
-          aria-label="Back to previous"
+          className="rounded-xl border border-[color:var(--border)] px-4 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
         >
           Back
         </button>
       </div>
     </div>
   );
-}
-
-function formatTime(s: number) {
-  if (!isFinite(s) || s < 0) return "0:00";
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60).toString().padStart(2, "0");
-  return `${m}:${sec}`;
 }
