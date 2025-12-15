@@ -1,6 +1,6 @@
 import "./globals.css";
-import Link from "next/link";
 import Script from "next/script";
+import Link from "next/link";
 
 export const metadata = {
   title: "Ondu",
@@ -15,7 +15,6 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="light">
       <head>
-        {/* Apply theme before hydration to avoid flash */}
         <Script id="ondu-theme-init" strategy="beforeInteractive">
           {`
             (function() {
@@ -28,21 +27,18 @@ export default function RootLayout({
           `}
         </Script>
 
-        {/* Wire up the toggle button without turning layout into a client component */}
         <Script id="ondu-theme-toggle" strategy="afterInteractive">
           {`
             (function() {
               function getTheme() {
-                try {
-                  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-                } catch (e) { return "light"; }
+                return document.documentElement.getAttribute("data-theme") === "dark"
+                  ? "dark"
+                  : "light";
               }
 
               function setTheme(theme) {
-                try {
-                  document.documentElement.setAttribute("data-theme", theme);
-                  localStorage.setItem("onduTheme", theme);
-                } catch (e) {}
+                document.documentElement.setAttribute("data-theme", theme);
+                localStorage.setItem("onduTheme", theme);
                 syncUI();
               }
 
@@ -50,14 +46,12 @@ export default function RootLayout({
                 var btn = document.getElementById("ondu-theme-btn");
                 if (!btn) return;
                 var theme = getTheme();
-                btn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
-                btn.textContent = theme === "dark" ? "Night" : "Day";
-                btn.title = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
+                btn.textContent = theme === "dark" ? "☾" : "☼";
+                btn.setAttribute("aria-pressed", theme === "dark");
               }
 
               function toggleTheme() {
-                var theme = getTheme();
-                setTheme(theme === "dark" ? "light" : "dark");
+                setTheme(getTheme() === "dark" ? "light" : "dark");
               }
 
               document.addEventListener("DOMContentLoaded", function() {
@@ -66,7 +60,6 @@ export default function RootLayout({
                 syncUI();
               });
 
-              // In case scripts run after DOMContentLoaded in some dev cases
               setTimeout(function() {
                 var btn = document.getElementById("ondu-theme-btn");
                 if (btn && !btn.__onduBound) {
@@ -81,52 +74,54 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-screen text-[color:var(--text-primary)]">
-        <header className="sticky top-0 z-50 border-b border-[color:var(--border)] bg-[color:color-mix(in_srgb,var(--bg)_88%,transparent)] backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-            <Link href="/" className="flex items-center gap-3">
-              <div className="grid h-9 w-9 place-items-center rounded-xl border border-[color:var(--border)] bg-[color:color-mix(in_srgb,var(--surface)_40%,transparent)] text-sm font-semibold">
-                O
-              </div>
-              <div className="leading-tight">
-                <div className="text-sm font-semibold">Ondu</div>
-                <div className="text-xs ondu-muted">Read clean. Listen clearly.</div>
-              </div>
+        {/* Device status strip */}
+        <header className="sticky top-0 z-50 border-b border-[color:var(--border)] bg-[color:color-mix(in_srgb,var(--bg)_92%,transparent)]">
+          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2">
+            <Link
+              href="/?screen=welcome"
+              className="
+                flex items-baseline gap-2
+                text-sm
+                cursor-pointer
+                select-none
+                rounded-md
+                px-1
+                hover:bg-[color:color-mix(in_srgb,var(--surface)_25%,transparent)]
+                focus-visible:outline-none
+                focus-visible:bg-[color:color-mix(in_srgb,var(--surface)_25%,transparent)]
+              "
+              title="Return to start"
+            >
+              <span className="font-medium">Ondu</span>
+              <span className="font-semibold">音読</span>
             </Link>
 
-            <nav className="flex items-center gap-2">
-              <button
-                id="ondu-theme-btn"
-                type="button"
-                aria-pressed="false"
-                className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
-                title="Switch theme"
-              >
-                Day
-              </button>
-
-              <Link
-                href="/upload"
-                className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
-              >
-                Upload
-              </Link>
-              <Link
-                href="/converted"
-                className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
-              >
-                Library
-              </Link>
-              <Link
-                href="/delete"
-                className="rounded-xl border border-[color:var(--border)] px-3 py-2 text-sm hover:bg-[color:color-mix(in_srgb,var(--surface)_55%,transparent)]"
-              >
-                Delete
-              </Link>
-            </nav>
+            {/* Theme mode switch */}
+            <button
+              id="ondu-theme-btn"
+              type="button"
+              aria-pressed="false"
+              title="Toggle theme"
+              className="
+                px-2 py-1
+                text-bold
+                rounded-md
+                cursor-pointer
+                select-none
+                transition-colors duration-100
+                hover:bg-[color:color-mix(in_srgb,var(--surface)_35%,transparent)]
+                focus-visible:outline-none
+                focus-visible:bg-[color:color-mix(in_srgb,var(--surface)_35%,transparent)]
+              "
+            >
+              ☼
+            </button>
           </div>
         </header>
 
-        <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 py-8">
+          {children}
+        </main>
       </body>
     </html>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface Article {
   id: string;
@@ -12,7 +13,6 @@ export default function ArticleListScreen({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Use relative URL so Next.js rewrites proxy to backend
     fetch('/api/articles')
       .then((res) => {
         if (!res.ok) throw new Error(`Failed to load articles (${res.status})`);
@@ -29,39 +29,59 @@ export default function ArticleListScreen({ onBack }: { onBack: () => void }) {
       });
   }, []);
 
+  const rowStyle =
+    'block w-full rounded-xl border border-[color:var(--border)] ' +
+    'px-4 py-3 text-left text-sm sm:text-base ' +
+    'bg-[color:color-mix(in_srgb,var(--surface)_86%,transparent)] ' +
+    'hover:bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] ' +
+    'active:translate-y-[1px] transition ' +
+    'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--ring)]';
+
+  const secondaryBtn =
+    'inline-flex items-center justify-center rounded-2xl border border-[color:var(--border)] ' +
+    'px-5 py-2.5 text-sm font-medium ' +
+    'bg-[color:color-mix(in_srgb,var(--surface)_84%,transparent)] ' +
+    'hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] ' +
+    'active:translate-y-[1px] transition';
+
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6">
-      <div className="space-y-6">
-        <h2 className="text-3xl font-bold text-inkBlack text-center mb-4">
-          Available Articles
+    <div className="space-y-6 text-center">
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          Library
         </h2>
+        <p className="mt-2 text-sm text-[color:var(--text-secondary)]">
+          Select an article to open the reader.
+        </p>
+      </div>
 
-        {loading && <p className="text-center text-slateViolet">Loading…</p>}
-
-        <div className="bg-lilacMist text-inkBlack p-4 rounded-xl shadow-md">
-          <ul className="space-y-1">
-            {articles.map((article) => (
-              <li key={article.id} className="leading-relaxed py-1">
-                <a
-                  href={`/converted/${article.id}/reader`}
-                  className="block px-2 py-1 rounded-md hover:bg-skyFade/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inkBlack/30 transition"
-                >
-                  {article.title}
-                </a>
-              </li>
-            ))}
-          </ul>
-
-          <div className="text-center mt-6">
-            <button
-              onClick={onBack}
-              className="bg-coralGlow hover:bg-skyFade text-inkBlack px-6 py-2 rounded-xl shadow-sm font-semibold transition-all duration-200 min-h-[44px] min-w-[44px]"
-              aria-label="Back"
+      {loading ? (
+        <p className="text-sm text-[color:var(--text-secondary)]">Loading…</p>
+      ) : articles.length === 0 ? (
+        <p className="text-sm text-[color:var(--text-secondary)]">
+          No articles found.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {articles.map((article) => (
+            <Link
+              key={article.id}
+              href={`/converted/${article.id}/reader`}
+              className={rowStyle}
             >
-              Back
-            </button>
-          </div>
+              <div className="font-semibold">{article.title}</div>
+              <div className="mt-1 text-xs text-[color:var(--text-tertiary)]">
+                Open reader
+              </div>
+            </Link>
+          ))}
         </div>
+      )}
+
+      <div className="pt-2">
+        <button onClick={onBack} className={secondaryBtn} aria-label="Back">
+          Back
+        </button>
       </div>
     </div>
   );

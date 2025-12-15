@@ -1,121 +1,108 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 
-interface Props {
+type Props = {
   onBack: () => void;
-}
+};
 
 export default function UploadScreen({ onBack }: Props) {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleUpload = async () => {
-    setIsLoading(true);
-    setMessage('');
+  const primaryBtn =
+    'inline-flex items-center justify-center rounded-2xl border border-[color:var(--border)] ' +
+    'px-6 py-3 min-h-[44px] text-sm sm:text-base font-semibold ' +
+    'bg-[color:color-mix(in_srgb,var(--surface)_92%,transparent)] ' +
+    'hover:bg-[color:color-mix(in_srgb,var(--surface)_96%,transparent)] ' +
+    // hardware feel
+    'shadow-sm active:shadow-none active:translate-y-[1px] ' +
+    'transition-[transform,box-shadow,background-color] duration-75 ' +
+    'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--ring)]';
+
+  const secondaryBtn =
+    'inline-flex items-center justify-center rounded-2xl border border-[color:var(--border)] ' +
+    'px-5 py-2.5 text-sm font-medium ' +
+    'bg-[color:color-mix(in_srgb,var(--surface)_84%,transparent)] ' +
+    'hover:bg-[color:color-mix(in_srgb,var(--surface)_90%,transparent)] ' +
+    'active:translate-y-[1px] transition';
+
+  async function handleSubmit() {
+    if (!text && !file) return;
+
+    setLoading(true);
 
     const formData = new FormData();
-    if (file) {
-      formData.append('file', file);
-    } else if (text.trim()) {
-      const blob = new Blob([text], { type: 'text/plain' });
-      formData.append('file', new File([blob], 'raw.txt'));
-    } else {
-      setMessage('Please provide a file or raw text.');
-      setIsLoading(false);
-      return;
-    }
+    if (text) formData.append('text', text);
+    if (file) formData.append('file', file);
 
     try {
-      // ✅ Relative URL so Next rewrites proxy to FastAPI
       const res = await fetch('/upload', {
         method: 'POST',
         body: formData,
       });
 
-      const data = await res.json();
-
-      if (res.ok && data.id) {
-        setMessage('Upload successful! Redirecting...');
-        setText('');
-        setFile(null);
-        window.location.href = `/converted/${data.id}`;
-      } else {
-        setMessage(data.detail || 'Upload failed.');
+      if (!res.ok) {
+        throw new Error(`Upload failed (${res.status})`);
       }
-    } catch (error) {
-      setMessage('An error occurred during upload.');
-    } finally {
-      setIsLoading(false);
+
+      // Backend handles redirect or navigation
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-inkBlack mb-4 text-center">Upload Text</h2>
+    <div className="space-y-6 text-center">
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+          Upload Text
+        </h2>
+        <p className="mt-2 text-sm text-[color:var(--text-secondary)]">
+          Paste text or select a file to begin.
+        </p>
+      </div>
 
-      <textarea
-        placeholder="Paste your raw text here..."
-        className="w-full h-40 p-4 rounded-xl border border-coralGlow bg-white text-inkBlack focus:outline-none focus:ring-2 focus:ring-coralGlow"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-      />
-
-      <div className="flex items-center gap-4">
-        <input
-          type="file"
-          accept=".txt,.pdf"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="block text-sm text-slateViolet file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-skyFade file:text-inkBlack hover:file:bg-duskBlue"
+      <div className="flex flex-col gap-4 items-center">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Paste raw text here…"
+          className="w-full max-w-lg min-h-[140px] rounded-xl border border-[color:var(--border)] p-3 text-sm bg-transparent focus:outline-none focus:ring-4 focus:ring-[color:var(--ring)]"
         />
+
+        <label className="w-full max-w-lg text-sm text-left">
+          <input
+            type="file"
+            className="block w-full text-sm"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
       </div>
 
-      <div className="flex gap-4 mt-4 items-center">
+      <div className="flex justify-center gap-4 pt-2">
         <button
-          onClick={handleUpload}
-          disabled={isLoading}
-          className="flex items-center justify-center gap-2 bg-coralGlow hover:bg-skyFade text-inkBlack font-semibold px-6 py-2 rounded-xl shadow-md transition-all duration-200"
+          onClick={handleSubmit}
+          className={primaryBtn}
+          disabled={loading}
+          aria-disabled={loading}
+          style={loading ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
         >
-          {isLoading ? (
-            <>
-              <svg
-                className="animate-spin h-5 w-5 text-inkBlack"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                ></path>
-              </svg>
-              Uploading...
-            </>
-          ) : (
-            'Submit'
-          )}
+          {loading ? 'Submitting…' : 'Submit'}
         </button>
 
-        <button
-          onClick={onBack}
-          className="bg-duskBlue hover:bg-skyFade text-inkBlack font-semibold px-6 py-2 rounded-xl shadow-sm transition-all duration-200"
-        >
-          ⬅ Back
+        <button onClick={onBack} className={secondaryBtn}>
+          Back
         </button>
       </div>
 
-      {message && <p className="text-center text-inkBlack mt-4">{message}</p>}
+      {loading && (
+        <div className="pt-2 text-xs sm:text-sm text-[color:var(--text-tertiary)]">
+          Processing text…
+        </div>
+      )}
     </div>
   );
 }
